@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modèle de fiche officine pré-visite</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2733;
+      --muted: #5e6b78;
+      --line: #d8dee6;
+      --soft: #f4f7fa;
+      --accent: #0f766e;
+      --accent-soft: #dff4f1;
+      --page: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #eef2f5;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 18px auto;
+      padding: 22mm 20mm;
+      background: var(--page);
+      box-shadow: 0 18px 42px rgba(29, 39, 51, 0.14);
+    }
+
+    header {
+      padding-bottom: 14px;
+      border-bottom: 2px solid var(--accent);
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 23px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+
+    h2 {
+      margin: 22px 0 9px;
+      font-size: 15px;
+      line-height: 1.25;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .identity {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 22px;
+      margin: 0 0 16px;
+      padding: 14px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    .field.wide {
+      grid-column: 1 / -1;
+    }
+
+    .label {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .value {
+      color: var(--ink);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #07534e;
+      font-weight: 700;
+    }
+
+    .contact {
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: #fbfcfd;
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .template-comment {
+      margin: 0 0 10px;
+      padding: 9px 11px;
+      border: 1px dashed #9aa8b5;
+      border-radius: 6px;
+      background: #fffaf0;
+      color: #6b4e16;
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 14px;
+      margin-top: 6px;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfd;
+    }
+
+    .metric span:first-child {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .metric span:last-child {
+      text-align: right;
+      font-weight: 700;
+    }
+
+    .visit-focus {
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--soft);
+    }
+
+    .print-note {
+      margin-top: 26px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        margin: 0;
+        box-shadow: none;
+        width: auto;
+        min-height: 297mm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page">
+      <header>
+        <h1>Fiche officine pré-visite — [NOM DE L’OFFICINE] ([VILLE])</h1>
+      </header>
+
+      <p class="template-comment">Commentaire modèle : renseigner ici le nom commercial de l’officine et la ville pour identifier immédiatement la fiche.</p>
+
+      <section class="identity" aria-label="Informations officine">
+        <div class="field">
+          <div class="label">Galien clientId</div>
+          <div class="value">[ID CLIENT]</div>
+        </div>
+        <div class="field">
+          <div class="label">CIP</div>
+          <div class="value">[CODE CIP]</div>
+        </div>
+        <div class="field wide">
+          <div class="label">Adresse</div>
+          <div class="value">[ADRESSE COMPLÈTE]</div>
+        </div>
+        <div class="field">
+          <div class="label">Téléphone</div>
+          <div class="value">[TÉLÉPHONE]</div>
+        </div>
+        <div class="field">
+          <div class="label">Email</div>
+          <div class="value">[EMAIL]</div>
+        </div>
+        <div class="field">
+          <div class="label">Statut</div>
+          <div class="value"><span class="badge">[STATUT]</span></div>
+        </div>
+        <div class="field">
+          <div class="label">Potentiel</div>
+          <div class="value">[POTENTIEL]</div>
+        </div>
+        <div class="field wide">
+          <div class="label">KAM terrain</div>
+          <div class="value">[NOM DU KAM]</div>
+        </div>
+      </section>
+
+      <h2>Contact clé</h2>
+      <p class="template-comment">Commentaire modèle : indiquer la personne à cibler pendant la visite, son rôle si utile, et toute préférence de contact connue.</p>
+      <div class="contact">[NOM DU CONTACT CLÉ]</div>
+
+      <h2>Dernière activité</h2>
+      <p class="template-comment">Commentaire modèle : résumer la dernière interaction commerciale, le commentaire opérationnel important et la prochaine visite déjà planifiée.</p>
+      <ul>
+        <li>Dernière visite : [DATE] — [TYPE DE VISITE]</li>
+        <li>Commentaire : « [COMMENTAIRE UTILE À RELIRE AVANT VISITE] »</li>
+        <li>Prochaine visite planifiée : [DATE] à [HEURE] ([FUSEAU HORAIRE]) — [OBJECTIF DE VISITE]</li>
+      </ul>
+
+      <h2>Historique utile</h2>
+      <p class="template-comment">Commentaire modèle : garder uniquement les événements qui orientent la préparation de visite : marchés, formations, merchandising, points récurrents.</p>
+      <ul>
+        <li>[DATE] — Signature de marché : [DÉTAILS DU MARCHÉ]</li>
+        <li>[DATE] — Formation / merchandising : [DÉTAILS UTILES]</li>
+        <li>[TENDANCE OBSERVÉE SUR LES VISITES RÉCENTES]</li>
+      </ul>
+
+      <h2>Commandes</h2>
+      <p class="template-comment">Commentaire modèle : afficher les volumes récents, le comparatif annuel et le canal de commande dominant pour préparer l’objectif de réassort.</p>
+      <ul>
+        <li>Dernière commande : [DATE] — [MONTANT]</li>
+        <li>[ANNÉE EN COURS] YTD : [NOMBRE] commandes — [MONTANT]</li>
+        <li>[ANNÉE PRÉCÉDENTE] : [NOMBRE] commandes — [MONTANT]</li>
+        <li>Source dominante des commandes récentes : [CANAL]</li>
+      </ul>
+
+      <h2>Engagements / contrats</h2>
+      <p class="template-comment">Commentaire modèle : préciser les engagements visibles, leur niveau d’avancement et les contrats actifs à sécuriser ou reconduire.</p>
+      <ul>
+        <li>Engagements [ANNÉES] visibles et à [TAUX D’AVANCEMENT]</li>
+        <li>Contrat [ANNÉE] actif : [NOM / GAMME / CONDITIONS]</li>
+        <li>Types de contrats présents : [LISTE DES CONTRATS]</li>
+      </ul>
+
+      <h2>Indicateurs merchandising</h2>
+      <p class="template-comment">Commentaire modèle : compléter avec le dernier relevé disponible pour préparer le contrôle terrain et les actions correctives.</p>
+      <div class="metrics">
+        <div class="metric"><span>Passages / jour</span><span>[VALEUR]</span></div>
+        <div class="metric"><span>Taille pharmacie</span><span>[VALEUR]</span></div>
+        <div class="metric"><span>Positionnement rayon</span><span>[VALEUR]</span></div>
+        <div class="metric"><span>Double implantation</span><span>[OUI / NON]</span></div>
+        <div class="metric"><span>Tablettes véto</span><span>[NOMBRE]</span></div>
+        <div class="metric"><span>Tablettes BI</span><span>[NOMBRE]</span></div>
+        <div class="metric"><span>Part linéaire calculée</span><span>[POURCENTAGE]</span></div>
+        <div class="metric"><span>Personnes formées</span><span>[NOMBRE]</span></div>
+        <div class="metric"><span>Formations sur 12 mois</span><span>[NOMBRE]</span></div>
+        <div class="metric"><span>Éligible parrainage</span><span>[OUI / NON]</span></div>
+      </div>
+    </section>
+
+    <section class="page page-break">
+      <header>
+        <h1>Points à travailler en visite</h1>
+      </header>
+
+      <div class="visit-focus">
+        <p class="template-comment">Commentaire modèle : transformer les constats précédents en actions concrètes à mener pendant la visite. Limiter à 4 à 6 priorités.</p>
+        <ul>
+          <li>[ACTION PRIORITAIRE 1]</li>
+          <li>[ACTION PRIORITAIRE 2]</li>
+          <li>[ACTION PRIORITAIRE 3]</li>
+          <li>[ACTION PRIORITAIRE 4]</li>
+          <li>[ACTION PRIORITAIRE 5]</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

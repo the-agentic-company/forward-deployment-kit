@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modèle d'analyse email sinistre</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2733;
+      --muted: #5e6b78;
+      --line: #d8dee6;
+      --soft: #f4f7fa;
+      --accent: #0f766e;
+      --accent-dark: #07534e;
+      --accent-soft: #dff4f1;
+      --warning: #8a5a00;
+      --warning-soft: #fff4d6;
+      --page: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      overflow-x: hidden;
+    }
+
+    body {
+      margin: 0;
+      background: #eef2f5;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      overflow-x: hidden;
+    }
+
+    .page {
+      width: min(210mm, calc(100vw - 24px));
+      min-height: 297mm;
+      margin: 18px auto;
+      padding: clamp(22px, 7vw, 22mm) clamp(18px, 6vw, 20mm);
+      background: var(--page);
+      box-shadow: 0 18px 42px rgba(29, 39, 51, 0.14);
+      overflow: hidden;
+    }
+
+    header {
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 23px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+
+    h2 {
+      margin: 22px 0 9px;
+      font-size: 15px;
+      line-height: 1.25;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      line-height: 1.25;
+      color: var(--ink);
+    }
+
+    .template-comment {
+      margin: 0 0 10px;
+      padding: 9px 11px;
+      border-radius: 6px;
+      background: #fffaf0;
+      color: #6b4e16;
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+
+    .identity {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 22px;
+      margin: 0 0 16px;
+      padding: 14px;
+      background: var(--soft);
+      border-radius: 6px;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: minmax(92px, 128px) minmax(0, 1fr);
+      gap: 8px;
+      align-items: baseline;
+      min-width: 0;
+    }
+
+    .field.wide {
+      grid-column: 1 / -1;
+    }
+
+    .label {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .value {
+      color: var(--ink);
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .badge {
+      display: inline-block;
+      max-width: 100%;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-weight: 700;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .badge.warning {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-top: 8px;
+      font-size: 12.5px;
+    }
+
+    th,
+    td {
+      padding: 7px 8px;
+      vertical-align: top;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      background: var(--soft);
+      color: var(--muted);
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .col-date {
+      width: 16%;
+    }
+
+    .col-from {
+      width: 18%;
+    }
+
+    .col-subject {
+      width: 24%;
+    }
+
+    .col-summary {
+      width: 30%;
+    }
+
+    .col-action {
+      width: 12%;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .decision-box {
+      min-height: 96px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: #fbfcfd;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .missing-docs {
+      padding: 13px 15px;
+      background: #fffdf6;
+      overflow-wrap: anywhere;
+    }
+
+    .draft {
+      min-height: 150px;
+      padding: 14px 16px;
+      border-radius: 6px;
+      background: var(--soft);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .print-note {
+      margin-top: 26px;
+      padding-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        margin: 0;
+        box-shadow: none;
+        width: auto;
+        min-height: 297mm;
+        overflow: visible;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .identity,
+      .decision {
+        grid-template-columns: 1fr;
+      }
+
+      .field {
+        grid-template-columns: 1fr;
+        gap: 2px;
+      }
+
+      table {
+        font-size: 11.5px;
+      }
+
+      th,
+      td {
+        padding: 6px 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page">
+      <header>
+        <h1>Analyse email sinistre — [NOM DU CLIENT]</h1>
+      </header>
+
+      <p class="template-comment">Commentaire modèle : remplir cette fiche avec les 10 derniers emails échangés avec le client, puis qualifier si la demande correspond à un nouveau sinistre ou à un dossier déjà ouvert.</p>
+
+      <section class="identity" aria-label="Informations client et sinistre">
+        <div class="field">
+          <div class="label">Client</div>
+          <div class="value">[NOM DU CLIENT]</div>
+        </div>
+        <div class="field">
+          <div class="label">Email client</div>
+          <div class="value">[EMAIL CLIENT]</div>
+        </div>
+        <div class="field">
+          <div class="label">Référence</div>
+          <div class="value">[RÉFÉRENCE DOSSIER OU N/A]</div>
+        </div>
+        <div class="field">
+          <div class="label">Date d'analyse</div>
+          <div class="value">[DATE]</div>
+        </div>
+        <div class="field">
+          <div class="label">Qualification</div>
+          <div class="value"><span class="badge">[NOUVEAU SINISTRE / SUIVI DE SINISTRE]</span></div>
+        </div>
+        <div class="field">
+          <div class="label">Priorité</div>
+          <div class="value"><span class="badge warning">[FAIBLE / NORMALE / URGENTE]</span></div>
+        </div>
+        <div class="field wide">
+          <div class="label">Objet détecté</div>
+          <div class="value">[OBJET OU MOTIF PRINCIPAL DE LA DEMANDE]</div>
+        </div>
+      </section>
+
+      <h2>Dernières conversations email</h2>
+      <p class="template-comment">Commentaire modèle : trier du plus récent au plus ancien. Garder une ligne par email ou par échange significatif, dans la limite des 10 derniers échanges client.</p>
+      <table aria-label="Les 10 dernières conversations email avec le client">
+        <thead>
+          <tr>
+            <th class="col-date">Date</th>
+            <th class="col-from">Expéditeur</th>
+            <th class="col-subject">Objet</th>
+            <th class="col-summary">Résumé utile</th>
+            <th class="col-action">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>[DATE EMAIL 1]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ DE LA DEMANDE, DES INFORMATIONS FOURNIES OU DE LA RÉPONSE]</td>
+            <td>[À TRAITER / INFO / RÉPONDU]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 2]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 3]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 4]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 5]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 6]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 7]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 8]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 9]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+          <tr>
+            <td>[DATE EMAIL 10]</td>
+            <td>[CLIENT / INTERNE]</td>
+            <td>[OBJET]</td>
+            <td>[RÉSUMÉ]</td>
+            <td>[STATUT]</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="page page-break">
+      <header>
+        <h1>Qualification et réponse proposée</h1>
+      </header>
+
+      <h2>Nouveau sinistre ou suivi</h2>
+      <p class="template-comment">Commentaire modèle : justifier brièvement la qualification avec les signaux utilisés : absence de référence existante, nouvelle date d'événement, nouveau tiers, nouvelle garantie demandée, ou rattachement clair à un dossier ouvert.</p>
+      <div class="decision">
+        <div class="decision-box">
+          <h3>Décision</h3>
+          <p><span class="badge">[NOUVEAU SINISTRE / PAS UN NOUVEAU SINISTRE]</span></p>
+          <p>[JUSTIFICATION COURTE]</p>
+        </div>
+        <div class="decision-box">
+          <h3>Prochaine action interne</h3>
+          <p>[OUVRIR UN DOSSIER / COMPLÉTER LE DOSSIER EXISTANT / DEMANDER PRÉCISIONS / TRANSFÉRER À L'ÉQUIPE]</p>
+        </div>
+      </div>
+
+      <h2>Documents manquants</h2>
+      <p class="template-comment">Commentaire modèle : lister uniquement les pièces nécessaires et non reçues. Supprimer les lignes inutiles ou les marquer comme reçues si elles sont déjà dans les emails.</p>
+      <div class="missing-docs">
+        <ul>
+          <li>[DOCUMENT MANQUANT 1] — raison : [POURQUOI IL EST NÉCESSAIRE]</li>
+          <li>[DOCUMENT MANQUANT 2] — raison : [POURQUOI IL EST NÉCESSAIRE]</li>
+          <li>[DOCUMENT MANQUANT 3] — raison : [POURQUOI IL EST NÉCESSAIRE]</li>
+          <li>[DOCUMENT MANQUANT 4] — raison : [POURQUOI IL EST NÉCESSAIRE]</li>
+          <li>[AUCUN DOCUMENT MANQUANT SI LE DOSSIER EST COMPLET]</li>
+        </ul>
+      </div>
+
+      <h2>Brouillon de réponse proposé</h2>
+      <p class="template-comment">Commentaire modèle : adapter le ton au client, mentionner les documents manquants, confirmer la qualification du sinistre et indiquer la prochaine étape.</p>
+      <div class="draft">Bonjour [NOM DU CLIENT],
+
+Nous accusons réception de votre message concernant [OBJET / ÉVÉNEMENT].
+
+Après vérification des derniers échanges, votre demande est qualifiée comme [NOUVEAU SINISTRE / SUIVI DU DOSSIER EXISTANT RÉFÉRENCE X].
+
+Pour pouvoir poursuivre le traitement, il nous manque les éléments suivants :
+- [DOCUMENT MANQUANT 1]
+- [DOCUMENT MANQUANT 2]
+- [DOCUMENT MANQUANT 3]
+
+Dès réception de ces pièces, nous pourrons [OUVRIR LE DOSSIER / COMPLÉTER L'ANALYSE / TRANSMETTRE À L'ÉQUIPE COMPÉTENTE].
+
+Bien cordialement,
+[SIGNATURE]</div>
+
+      <p class="print-note">Note : ce modèle est prévu pour une sortie A4 imprimable ou PDF. Les champs entre crochets sont à remplacer par les données extraites des emails et du dossier client.</p>
+    </section>
+  </main>
+</body>
+</html>
