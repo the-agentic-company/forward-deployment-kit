@@ -1,16 +1,16 @@
 {
   "mcpServers": {
-    "cmdclaw-local": {
+    "bap-local": {
       "type": "http",
-      "url": "http://127.0.0.1:3010/cmdclaw"
+      "url": "http://127.0.0.1:3010/bap"
     },
-    "cmdclaw-staging": {
+    "bap-staging": {
       "type": "http",
-      "url": "https://mcp.staging.heybap.com/cmdclaw"
+      "url": "https://mcp.staging.heybap.com/bap"
     },
-    "cmdclaw-prod": {
+    "bap-prod": {
       "type": "http",
-      "url": "https://mcp.heybap.com/cmdclaw"
+      "url": "https://mcp.heybap.com/bap"
     }
   }
 }

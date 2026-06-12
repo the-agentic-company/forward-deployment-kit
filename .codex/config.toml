@@ -1,9 +1,9 @@
-[mcp_servers.cmdclaw-local]
-url = "http://127.0.0.1:3010/cmdclaw"
+[mcp_servers.bap-local]
+url = "http://127.0.0.1:3010/bap"
 
-[mcp_servers.cmdclaw-staging]
-url = "https://mcp.staging.heybap.com/cmdclaw"
+[mcp_servers.bap-staging]
+url = "https://mcp.staging.heybap.com/bap"
 
 
-[mcp_servers.cmdclaw-prod]
-url = "https://mcp.heybap.com/cmdclaw"
+[mcp_servers.bap-prod]
+url = "https://mcp.heybap.com/bap"
