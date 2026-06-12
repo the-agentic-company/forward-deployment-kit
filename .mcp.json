@@ -6,11 +6,11 @@
     },
     "cmdclaw-staging": {
       "type": "http",
-      "url": "https://mcp.staging.cmdclaw.ai/cmdclaw"
+      "url": "https://mcp.staging.heybap.com/cmdclaw"
     },
     "cmdclaw-prod": {
       "type": "http",
-      "url": "https://mcp.cmdclaw.ai/cmdclaw"
+      "url": "https://mcp.heybap.com/cmdclaw"
     }
   }
 }
