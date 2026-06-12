@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Linear · Latest 5 issues</title>
+<style>
+  :root {
+    --ivory: oklch(0.985 0.005 25);
+    --slate: oklch(0.205 0.01 25);
+    --clay: oklch(0.50 0.14 25);
+    --clay-d: oklch(0.40 0.12 25);
+    --oat: oklch(0.94 0.03 25);
+    --olive: oklch(0.56 0.12 145);
+    --gray-50: oklch(0.97 0.006 25);
+    --gray-100: oklch(0.955 0.006 25);
+    --gray-200: oklch(0.922 0.006 25);
+    --gray-500: oklch(0.556 0.01 25);
+    --gray-800: oklch(0.30 0.01 25);
+    --white: oklch(0.995 0.003 25);
+    --violet: oklch(0.52 0.16 292);
+    --blue: oklch(0.54 0.14 232);
+    --amber: oklch(0.67 0.13 72);
+    --rust: oklch(0.42 0.13 32);
+    --shadow: rgba(20, 20, 19, 0.06);
+    --sans: Geist, Arial, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--ivory);
+    color: var(--slate);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  button,
+  select {
+    cursor: pointer;
+  }
+
+  .wrap {
+    width: min(1180px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 36px 0 52px;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 20px;
+    align-items: end;
+    margin-bottom: 20px;
+  }
+
+  .brandline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+  }
+
+  .linear-mark {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: var(--slate);
+    color: var(--ivory);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 550;
+    line-height: 1.16;
+    letter-spacing: 0;
+    text-wrap: balance;
+  }
+
+  .sub {
+    max-width: 70ch;
+    margin: 7px 0 0;
+    color: var(--gray-800);
+  }
+
+  .sync-card {
+    min-width: 240px;
+    padding: 12px 14px;
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    background: var(--white);
+  }
+
+  .sync-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+  }
+
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--olive);
+    box-shadow: 0 0 0 4px oklch(0.92 0.045 145);
+  }
+
+  .sync-time {
+    margin-top: 5px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-800);
+  }
+
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 0;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--gray-200);
+    background: color-mix(in oklch, var(--ivory) 92%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  .search {
+    position: relative;
+  }
+
+  .search svg {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    width: 15px;
+    height: 15px;
+    color: var(--gray-500);
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  input[type="search"],
+  select {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid var(--gray-200);
+    border-radius: 7px;
+    background: var(--white);
+    color: var(--slate);
+    outline: none;
+  }
+
+  input[type="search"] {
+    padding: 8px 12px 8px 36px;
+  }
+
+  select {
+    padding: 8px 32px 8px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  input[type="search"]:focus,
+  select:focus,
+  button:focus-visible,
+  .issue:focus-visible {
+    border-color: var(--clay);
+    box-shadow: 0 0 0 3px oklch(0.88 0.055 25 / 0.45);
+    outline: none;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    border-radius: 7px;
+    border: 1px solid var(--gray-200);
+    padding: 8px 12px;
+    background: var(--white);
+    color: var(--gray-800);
+    font-family: var(--mono);
+    font-size: 12px;
+    transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  }
+
+  .btn svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .btn:hover {
+    border-color: var(--gray-500);
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+  }
+
+  .btn.primary {
+    border-color: var(--slate);
+    background: var(--slate);
+    color: var(--ivory);
+  }
+
+  .btn.primary:hover {
+    background: var(--gray-800);
+  }
+
+  .content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .panel {
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    background: var(--white);
+    overflow: hidden;
+  }
+
+  .list-head,
+  .detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--gray-50);
+  }
+
+  .list-title,
+  .detail-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+
+  .issue-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .issue {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    width: 100%;
+    padding: 15px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--gray-50);
+    background: var(--white);
+    color: inherit;
+    text-align: left;
+    transition: background 140ms ease;
+  }
+
+  .issue:last-child {
+    border-bottom: 0;
+  }
+
+  .issue:hover {
+    background: var(--gray-50);
+  }
+
+  .issue.selected {
+    background: oklch(0.965 0.017 25);
+  }
+
+  .issue-main {
+    min-width: 0;
+  }
+
+  .issue-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+  }
+
+  .key {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-500);
+  }
+
+  .priority {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 6px;
+    border: 1px solid var(--gray-200);
+    padding: 1px 7px 2px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--gray-800);
+    background: var(--gray-50);
+  }
+
+  .priority.urgent {
+    border-color: oklch(0.78 0.08 32);
+    background: oklch(0.95 0.035 32);
+    color: var(--rust);
+  }
+
+  .priority.high {
+    border-color: oklch(0.82 0.07 72);
+    background: oklch(0.965 0.035 72);
+    color: oklch(0.40 0.10 72);
+  }
+
+  .priority.medium {
+    border-color: oklch(0.84 0.06 232);
+    background: oklch(0.955 0.025 232);
+    color: oklch(0.34 0.10 232);
+  }
+
+  .state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-800);
+  }
+
+  .state::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--gray-500);
+  }
+
+  .state.started::before { background: var(--blue); }
+  .state.triage::before { background: var(--amber); }
+  .state.backlog::before { background: var(--gray-500); }
+  .state.done::before { background: var(--olive); }
+
+  .issue-title {
+    margin: 0;
+    color: var(--slate);
+    font-size: 15px;
+    font-weight: 560;
+    line-height: 1.35;
+    text-wrap: pretty;
+  }
+
+  .issue-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    color: var(--gray-500);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .issue-aside {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 9px;
+    min-width: 92px;
+  }
+
+  .age {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+  }
+
+  .owner {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--gray-800);
+    font-size: 12px;
+  }
+
+  .avatar {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--slate);
+    color: var(--ivory);
+    font-family: var(--mono);
+    font-size: 10px;
+  }
+
+  .detail {
+    position: sticky;
+    top: 76px;
+  }
+
+  .detail-body {
+    padding: 16px;
+  }
+
+  .detail-key {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--gray-500);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .detail h3 {
+    margin: 0 0 11px;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0;
+    text-wrap: balance;
+  }
+
+  .detail p {
+    margin: 0;
+    color: var(--gray-800);
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 16px 0;
+  }
+
+  .field {
+    min-width: 0;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: var(--gray-50);
+  }
+
+  .field-label {
+    margin-bottom: 2px;
+    color: var(--gray-500);
+    font-family: var(--mono);
+    font-size: 10.5px;
+  }
+
+  .field-value {
+    overflow: hidden;
+    color: var(--gray-800);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .timeline {
+    margin-top: 16px;
+    padding-top: 13px;
+    border-top: 1px solid var(--gray-50);
+  }
+
+  .timeline-row {
+    display: grid;
+    grid-template-columns: 68px 1fr;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 12.5px;
+  }
+
+  .timeline-row time {
+    color: var(--gray-500);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .empty {
+    display: none;
+    padding: 30px 16px;
+    color: var(--gray-800);
+  }
+
+  .empty.show {
+    display: block;
+  }
+
+  .toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 20;
+    padding: 10px 13px;
+    border: 1px solid oklch(0.79 0.06 145);
+    border-radius: 8px;
+    background: oklch(0.94 0.035 145);
+    color: oklch(0.31 0.08 145);
+    font-family: var(--mono);
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 160ms ease, transform 160ms ease;
+    pointer-events: none;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (max-width: 900px) {
+    header,
+    .content {
+      grid-template-columns: 1fr;
+    }
+
+    .sync-card,
+    .detail {
+      min-width: 0;
+      position: static;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .wrap {
+      width: min(100% - 28px, 1180px);
+      padding-top: 24px;
+    }
+
+    .toolbar {
+      grid-template-columns: 1fr;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .issue {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .issue-aside {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      min-width: 0;
+    }
+
+    .detail-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div>
+      <div class="brandline">
+        <span class="linear-mark" aria-hidden="true">L</span>
+        <span>Linear workspace · mock sync</span>
+      </div>
+      <h1>Latest 5 Linear issues</h1>
+      <p class="sub">A focused inbox for the newest assigned work: scan state, priority, owner, and recent movement without opening the full tracker.</p>
+    </div>
+    <aside class="sync-card" aria-label="Sync status">
+      <div class="sync-label">
+        <span>Latest refresh</span>
+        <span class="live-dot" aria-hidden="true"></span>
+      </div>
+      <div class="sync-time" id="syncTime">Today · 14:58 Europe/Dublin</div>
+    </aside>
+  </header>
+
+  <section class="toolbar" aria-label="Issue controls">
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"></circle>
+        <path d="m21 21-4.3-4.3"></path>
+      </svg>
+      <span class="sr-only">Search issues</span>
+      <input id="query" type="search" placeholder="Search key, title, owner, or team" autocomplete="off" />
+    </label>
+    <label>
+      <span class="sr-only">Filter by state</span>
+      <select id="stateFilter">
+        <option value="all">All states</option>
+        <option value="Started">Started</option>
+        <option value="Triage">Triage</option>
+        <option value="Backlog">Backlog</option>
+        <option value="Done">Done</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button class="btn" id="refreshBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 12a9 9 0 0 1-15.5 6.3"></path>
+          <path d="M3 12A9 9 0 0 1 18.5 5.7"></path>
+          <path d="M18 2v6h-6"></path>
+          <path d="M6 22v-6h6"></path>
+        </svg>
+        Refresh
+      </button>
+      <button class="btn primary" id="copyBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        Copy list
+      </button>
+    </div>
+  </section>
+
+  <section class="content">
+    <div class="panel">
+      <div class="list-head">
+        <h2 class="list-title">Issue inbox</h2>
+        <span class="count" id="issueCount">5 shown</span>
+      </div>
+      <div class="issue-list" id="issueList"></div>
+      <div class="empty" id="emptyState">No issues match this view. Clear the search or switch the state filter.</div>
+    </div>
+
+    <aside class="panel detail" aria-live="polite">
+      <div class="detail-head">
+        <h2 class="detail-title">Selected issue</h2>
+        <span class="count" id="detailAge">8m ago</span>
+      </div>
+      <div class="detail-body" id="detailBody"></div>
+    </aside>
+  </section>
+</main>
+<div class="toast" id="toast" role="status">Copied</div>
+
+<script>
+  const issues = [
+    {
+      key: "LIN-4827",
+      title: "Reconcile duplicate organization invite events",
+      state: "Started",
+      stateClass: "started",
+      priority: "Urgent",
+      priorityClass: "urgent",
+      team: "Identity",
+      owner: "Mira Shah",
+      initials: "MS",
+      project: "Workspace graph",
+      updated: "8m ago",
+      created: "Today 14:44",
+      estimate: "2 pts",
+      description: "Two invite webhooks can land within the same second and create conflicting audit rows. The active path needs idempotent merge behavior before the next partner import.",
+      events: [
+        ["14:52", "Assignee changed to Mira Shah"],
+        ["14:49", "Priority raised after duplicate events reproduced"],
+        ["14:44", "Issue created from integration alert"]
+      ]
+    },
+    {
+      key: "LIN-4826",
+      title: "Add command menu action for cycle handoff notes",
+      state: "Triage",
+      stateClass: "triage",
+      priority: "High",
+      priorityClass: "high",
+      team: "Core App",
+      owner: "Theo Park",
+      initials: "TP",
+      project: "Cycles",
+      updated: "22m ago",
+      created: "Today 14:30",
+      estimate: "3 pts",
+      description: "Cycle owners want a fast action that opens the handoff composer with team, project, and cycle fields already filled from the current route.",
+      events: [
+        ["14:47", "Added to Cycles project"],
+        ["14:39", "Linked to customer request"],
+        ["14:30", "Issue created from product note"]
+      ]
+    },
+    {
+      key: "LIN-4825",
+      title: "Prevent roadmap row collapse when milestone names wrap",
+      state: "Backlog",
+      stateClass: "backlog",
+      priority: "Medium",
+      priorityClass: "medium",
+      team: "Roadmaps",
+      owner: "Ari Kim",
+      initials: "AK",
+      project: "Roadmap layout",
+      updated: "41m ago",
+      created: "Today 14:09",
+      estimate: "1 pt",
+      description: "Long milestone labels push action controls below the fold on small laptops. The row needs stable controls and a resilient label wrap.",
+      events: [
+        ["14:21", "Screenshot attached"],
+        ["14:12", "Moved to Roadmaps backlog"],
+        ["14:09", "Issue created from QA pass"]
+      ]
+    },
+    {
+      key: "LIN-4824",
+      title: "Ship loading skeleton for customer issue import",
+      state: "Started",
+      stateClass: "started",
+      priority: "High",
+      priorityClass: "high",
+      team: "Integrations",
+      owner: "Nina Wolfe",
+      initials: "NW",
+      project: "Support import",
+      updated: "1h ago",
+      created: "Today 13:55",
+      estimate: "2 pts",
+      description: "The importer currently blocks on a blank table for slow Zendesk workspaces. Show row skeletons and keep source filters visible while the import starts.",
+      events: [
+        ["14:04", "Implementation branch opened"],
+        ["13:59", "Acceptance criteria added"],
+        ["13:55", "Issue created from customer escalation"]
+      ]
+    },
+    {
+      key: "LIN-4823",
+      title: "Archive completed intake form experiments",
+      state: "Done",
+      stateClass: "done",
+      priority: "Low",
+      priorityClass: "",
+      team: "Growth",
+      owner: "Sam Rivera",
+      initials: "SR",
+      project: "Onboarding",
+      updated: "2h ago",
+      created: "Today 12:51",
+      estimate: "1 pt",
+      description: "The winning intake form is now live. Archive the inactive experiment configs and leave the decision note linked from the onboarding project.",
+      events: [
+        ["13:18", "Marked done"],
+        ["13:02", "Decision note linked"],
+        ["12:51", "Issue created from cleanup checklist"]
+      ]
+    }
+  ];
+
+  const issueList = document.getElementById("issueList");
+  const issueCount = document.getElementById("issueCount");
+  const detailBody = document.getElementById("detailBody");
+  const detailAge = document.getElementById("detailAge");
+  const query = document.getElementById("query");
+  const stateFilter = document.getElementById("stateFilter");
+  const emptyState = document.getElementById("emptyState");
+  const copyBtn = document.getElementById("copyBtn");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const toast = document.getElementById("toast");
+  const syncTime = document.getElementById("syncTime");
+
+  let selectedKey = issues[0].key;
+
+  function escapeHtml(value) {
+    return value.replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    }[char]));
+  }
+
+  function visibleIssues() {
+    const term = query.value.trim().toLowerCase();
+    const state = stateFilter.value;
+
+    return issues.filter((issue) => {
+      const text = [
+        issue.key,
+        issue.title,
+        issue.state,
+        issue.priority,
+        issue.team,
+        issue.owner,
+        issue.project
+      ].join(" ").toLowerCase();
+
+      return (state === "all" || issue.state === state) && (!term || text.includes(term));
+    });
+  }
+
+  function renderList() {
+    const visible = visibleIssues();
+
+    if (!visible.some((issue) => issue.key === selectedKey)) {
+      selectedKey = visible[0]?.key || issues[0].key;
+    }
+
+    issueList.innerHTML = visible.map((issue) => `
+      <button class="issue ${issue.key === selectedKey ? "selected" : ""}" type="button" data-key="${issue.key}">
+        <span class="issue-main">
+          <span class="issue-top">
+            <span class="key">${issue.key}</span>
+            <span class="state ${issue.stateClass}">${issue.state}</span>
+            <span class="priority ${issue.priorityClass}">${issue.priority}</span>
+          </span>
+          <span class="issue-title">${escapeHtml(issue.title)}</span>
+          <span class="issue-meta">
+            <span>${escapeHtml(issue.team)}</span>
+            <span>${escapeHtml(issue.project)}</span>
+            <span>${issue.estimate}</span>
+          </span>
+        </span>
+        <span class="issue-aside">
+          <span class="age">${issue.updated}</span>
+          <span class="owner"><span class="avatar" aria-hidden="true">${issue.initials}</span>${escapeHtml(issue.owner)}</span>
+        </span>
+      </button>
+    `).join("");
+
+    issueCount.textContent = `${visible.length} shown`;
+    emptyState.classList.toggle("show", visible.length === 0);
+    renderDetail();
+  }
+
+  function renderDetail() {
+    const issue = issues.find((item) => item.key === selectedKey) || issues[0];
+    detailAge.textContent = issue.updated;
+    detailBody.innerHTML = `
+      <div class="detail-key">
+        <span>${issue.key}</span>
+        <span class="state ${issue.stateClass}">${issue.state}</span>
+        <span class="priority ${issue.priorityClass}">${issue.priority}</span>
+      </div>
+      <h3>${escapeHtml(issue.title)}</h3>
+      <p>${escapeHtml(issue.description)}</p>
+      <div class="detail-grid">
+        <div class="field">
+          <div class="field-label">Owner</div>
+          <div class="field-value">${escapeHtml(issue.owner)}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Team</div>
+          <div class="field-value">${escapeHtml(issue.team)}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Created</div>
+          <div class="field-value">${issue.created}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Estimate</div>
+          <div class="field-value">${issue.estimate}</div>
+        </div>
+      </div>
+      <div class="timeline" aria-label="Recent issue activity">
+        ${issue.events.map(([time, event]) => `
+          <div class="timeline-row">
+            <time>${time}</time>
+            <span>${escapeHtml(event)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function showToast(message) {
+    toast.textContent = message;
+    toast.classList.add("show");
+    window.setTimeout(() => toast.classList.remove("show"), 1500);
+  }
+
+  async function copyVisibleIssues() {
+    const text = visibleIssues()
+      .map((issue) => `${issue.key} · ${issue.state} · ${issue.priority} · ${issue.title}`)
+      .join("\n");
+
+    if (!text) {
+      showToast("Nothing to copy");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("Issue list copied");
+    } catch {
+      showToast("Copy unavailable");
+    }
+  }
+
+  function refreshMockSync() {
+    const now = new Date();
+    syncTime.textContent = `Today · ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} Europe/Dublin`;
+    showToast("Mock sync refreshed");
+  }
+
+  issueList.addEventListener("click", (event) => {
+    const issueButton = event.target.closest(".issue");
+    if (!issueButton) return;
+    selectedKey = issueButton.dataset.key;
+    renderList();
+  });
+
+  query.addEventListener("input", renderList);
+  stateFilter.addEventListener("change", renderList);
+  copyBtn.addEventListener("click", copyVisibleIssues);
+  refreshBtn.addEventListener("click", refreshMockSync);
+
+  renderList();
+</script>
+</body>
+</html>

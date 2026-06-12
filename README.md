@@ -21,3 +21,7 @@ implement the PRD
 review the implementation 
 
 2. and 3. loop until 1. is happy with the output.
+
+## Mini Apps
+
+To create a mini app run the `create-mini-apps` skill.
