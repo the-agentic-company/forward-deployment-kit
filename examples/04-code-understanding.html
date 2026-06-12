@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CmdClaw · How authentication flows through cmdclaw/web</title>
+<title>Bap · How authentication flows through bap/web</title>
 <style>
   :root {
     --ivory: oklch(0.985 0.005 25);
@@ -250,7 +250,7 @@
   }
   .gotchas code { font-family: var(--mono); font-size: 11.5px; }
 
-  /* CmdClaw rebrand override: compact operations-console surface. */
+  /* Bap rebrand override: compact operations-console surface. */
   :root {
     --ivory: oklch(0.985 0.005 25);
     --slate: oklch(0.205 0.01 25);
@@ -286,10 +286,10 @@
 <div class="page">
 
   <header>
-    <div class="repo-line">cmdclaw/web · architecture note</div>
+    <div class="repo-line">bap/web · architecture note</div>
     <h1>How authentication flows through the codebase</h1>
     <p class="summary">
-      CmdClaw uses cookie-based sessions: the browser never holds a bearer token directly. Every authenticated request hits <code>/api/*</code>, passes through a single <code>verifyToken()</code> middleware, and resolves to a <code>Session</code> row that downstream handlers read off <code>req.ctx</code>. The middleware is the only place that talks to the session store, which is the only place that talks to the <code>sessions</code> table: so there's exactly one trust boundary to reason about.
+      Bap uses cookie-based sessions: the browser never holds a bearer token directly. Every authenticated request hits <code>/api/*</code>, passes through a single <code>verifyToken()</code> middleware, and resolves to a <code>Session</code> row that downstream handlers read off <code>req.ctx</code>. The middleware is the only place that talks to the session store, which is the only place that talks to the <code>sessions</code> table: so there's exactly one trust boundary to reason about.
     </p>
   </header>
 
@@ -307,7 +307,7 @@
         <g>
           <rect class="box" x="30"  y="40" width="150" height="64" rx="10"></rect>
           <text x="105" y="68" text-anchor="middle">Browser</text>
-          <text class="sub" x="105" y="84" text-anchor="middle">cmdclaw.app</text>
+          <text class="sub" x="105" y="84" text-anchor="middle">bap.app</text>
         </g>
         <g>
           <rect class="box" x="245" y="40" width="150" height="64" rx="10"></rect>

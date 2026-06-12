@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CmdClaw · Support reply prompt tuner</title>
+<title>Bap · Support reply prompt tuner</title>
 <style>
   :root {
     --ivory: oklch(0.985 0.005 25);
@@ -285,7 +285,7 @@
     letter-spacing: 0.02em;
   }
 
-  /* CmdClaw rebrand override: compact operations-console surface. */
+  /* Bap rebrand override: compact operations-console surface. */
   :root {
     --ivory: oklch(0.985 0.005 25);
     --slate: oklch(0.205 0.01 25);
@@ -321,7 +321,7 @@
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">CmdClaw / editor / prompt-tuner</div>
+    <div class="eyebrow">Bap / editor / prompt-tuner</div>
     <h1>Support reply draft prompt</h1>
     <p class="sub">Edit the system prompt on the left and watch three sample tickets re-render the filled template on the right, live as you type. When it reads well across all three moods, copy the template out.</p>
   </header>
@@ -370,7 +370,7 @@
   // ---------------------------------------------------------------------------
 
   var DEFAULT_TEMPLATE =
-'You are a support agent for CmdClaw, a project workspace for small teams.\n' +
+'You are a support agent for Bap, a project workspace for small teams.\n' +
 '\n' +
 'A customer named {{customer_name}} on the {{plan_tier}} plan wrote in about:\n' +
 '"{{ticket_subject}}"\n' +
@@ -379,7 +379,7 @@
 '{{ticket_body}}\n' +
 '\n' +
 'Write a reply that is {{tone}}, no more than 120 words, and ends with a single concrete next step.\n' +
-'Never promise a refund without escalating. Sign off as "The CmdClaw team."';
+'Never promise a refund without escalating. Sign off as "The Bap team."';
 
   var SAMPLES = [
     {
@@ -389,7 +389,7 @@
         customer_name: 'Priya N.',
         plan_tier: 'Free',
         ticket_subject: 'Where did my board go?',
-        ticket_body: 'Hi: I made a board yesterday called "Spring launch" with my coworker and today I can’t find it anywhere. I’m new to CmdClaw and I’m not sure if I deleted it by accident or if I’m just looking in the wrong place. Can you help?',
+        ticket_body: 'Hi: I made a board yesterday called "Spring launch" with my coworker and today I can’t find it anywhere. I’m new to Bap and I’m not sure if I deleted it by accident or if I’m just looking in the wrong place. Can you help?',
         tone: 'warm and patient'
       }
     },

@@ -1,9 +1,9 @@
 ---
-name: cmdclaw-coworker-reviewer
-description: Reviews a CmdClaw coworker implementation against its PRD and repository standards, returning an explicit OK or NOT OK verdict. Use when validating coworker implementation output, reviewer fix cycles, or PRD acceptance criteria.
+name: bap-coworker-reviewer
+description: Reviews a Bap coworker implementation against its PRD and repository standards, returning an explicit OK or NOT OK verdict. Use when validating coworker implementation output, reviewer fix cycles, or PRD acceptance criteria.
 ---
 
-# CmdClaw Coworker Reviewer
+# Bap Coworker Reviewer
 
 Review the implementation as a gate. The output must make it clear whether the orchestrator can stop or must run another implementation cycle.
 

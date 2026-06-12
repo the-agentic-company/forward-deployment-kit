@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CmdClaw · Debounced search: three approaches</title>
+  <title>Bap · Debounced search: three approaches</title>
   <style>
     :root {
       --ivory:    oklch(0.985 0.005 25);
@@ -252,7 +252,7 @@
       border-radius: 4px;
     }
   
-  /* CmdClaw rebrand override: compact operations-console surface. */
+  /* Bap rebrand override: compact operations-console surface. */
   :root {
     --ivory: oklch(0.985 0.005 25);
     --slate: oklch(0.205 0.01 25);
@@ -288,7 +288,7 @@
   <div class="page">
 
     <header class="page-head">
-      <div class="eyebrow">Exploration · CmdClaw web client</div>
+      <div class="eyebrow">Exploration · Bap web client</div>
       <h1>Three ways to implement debounced search</h1>
       <div class="prompt-box">
         <span class="label">Prompt</span>
@@ -444,7 +444,7 @@
           </div>
           <div class="row">
             <div class="cell pro">Callback form skips intermediate re-renders</div>
-            <div class="cell con">Uncontrolled input diverges from CmdClaw form patterns</div>
+            <div class="cell con">Uncontrolled input diverges from Bap form patterns</div>
           </div>
           <div class="row">
             <div class="cell pro">Well-tested edge cases (unmount, flush, cancel)</div>
@@ -468,7 +468,7 @@
       <h2>Recommendation</h2>
       <p>
         Go with <strong>approach 02, the custom <code>useDebounce</code> hook</strong>.
-        CmdClaw already has three places that hand-roll the inline pattern
+        Bap already has three places that hand-roll the inline pattern
         (task filter, command palette, member picker), so extracting one
         shared hook removes duplication without taking on a new dependency.
       </p>

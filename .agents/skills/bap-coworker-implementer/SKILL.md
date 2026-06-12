@@ -1,9 +1,9 @@
 ---
-name: cmdclaw-coworker-implementer
-description: Implements a CmdClaw coworker PRD with scoped code changes, checks, and a concise handoff for review. Use when an orchestrator or user provides a PRD, acceptance criteria, or reviewer fix brief for a CmdClaw coworker.
+name: bap-coworker-implementer
+description: Implements a Bap coworker PRD with scoped code changes, checks, and a concise handoff for review. Use when an orchestrator or user provides a PRD, acceptance criteria, or reviewer fix brief for a Bap coworker.
 ---
 
-# CmdClaw Coworker Implementer
+# Bap Coworker Implementer
 
 Implement the assigned PRD or review fix brief. Optimize for correct behavior, small scope, and reviewable changes.
 
@@ -19,7 +19,7 @@ Implement the assigned PRD or review fix brief. Optimize for correct behavior, s
 ## Implementation Rules
 
 - Treat the PRD acceptance criteria as the source of truth.
-- Respect CmdClaw glossary terms from `CONTEXT.md`.
+- Respect Bap glossary terms from `CONTEXT.md`.
 - Prefer existing project patterns, helpers, and test style.
 - Avoid mocks where practical; test real implementation behavior.
 - Keep changes scoped to the PRD or the reviewer fix brief.
