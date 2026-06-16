@@ -274,11 +274,145 @@ A 401 from step 1 means the bearer header is wrong. A successful step 3 returns 
 | Mode | When to use | Server-side check |
 |---|---|---|
 | `none` | Tool is safe + free for anyone (e.g. read-only public data lookup) | None |
-| `bearer` | Default for internal MCPs | `Authorization: Bearer <token>` |
+| `bearer` | Default for internal MCPs **if** the Bap UI shows the auth dropdown | `Authorization: Bearer <token>` |
 | `api_key` | Upstream API expects key in header/query | Custom header/query check |
-| `oauth2` | Per-user OAuth resource (Gmail, Calendar with user account) | Full RFC 8414 + RFC 9728 discovery endpoints |
+| `oauth2` | UI hides the dropdown (only "Connect OAuth" button) OR per-user OAuth needed | Full RFC 8414 + RFC 9728 discovery + auto-approve flow |
 
-For OAuth, you must expose **both** discovery endpoints and implement the full code → token flow with PKCE. Bap uses `{APP_URL}/api/oauth/callback` as redirect URI, `token_endpoint_auth_method: "none"` (public client). Don't go OAuth unless you really need per-user delegation.
+### Real-world gotcha: some Bap UIs hide the auth dropdown
+
+Depending on the workspace config (`fixedMcpAuthType` server flag), the "Add MCP" form may only ask for a URL, and the resulting MCP fiche only shows a "Connect OAuth" button — no Bearer or No-auth alternative. In that case Bearer is impossible without intervention from a Bap admin. **You must implement OAuth 2.0 on your MCP.**
+
+The good news: you don't need real user-scoped OAuth. You can implement an **auto-approving OAuth 2.0** that, behind the scenes, hands out a single shared bearer token. The flow goes through Bap's OAuth machinery (so the UI is happy) without ever showing a consent screen.
+
+### The auto-approving OAuth 2.0 pattern
+
+You need 5 endpoints. The full implementation is in the reference repo (`hyperstack-transcribe`). Summary:
+
+```
+/.well-known/oauth-protected-resource           (GET)  → { authorization_servers: [<origin>], scopes_supported: ["mcp"] }
+/.well-known/oauth-authorization-server         (GET)  → RFC 8414 metadata
+/oauth/register                                  (POST) → echo {client_id, ...}, public client, no secret
+/oauth/authorize?response_type=code&...          (GET)  → 302 to redirect_uri with code=<JWT> (auto-approve, NO consent screen)
+/oauth/token                                     (POST) → verify PKCE → return { access_token: <static bearer> }
+```
+
+Key design choices that make this small:
+
+1. **JWT-signed authorization code** — stateless. Sign with HS256 using `MCP_BEARER_TOKEN` as the secret. Payload: `{ redirect_uri, code_challenge, code_challenge_method, scope, jti, exp }`. 10 min TTL.
+2. **Auto-approve** — `/oauth/authorize` does NOT show a login or consent page; it immediately 302-redirects with a signed code. This is safe because the static bearer is server-only, the client never sees the real secret.
+3. **PKCE verification at /oauth/token** — `sha256(code_verifier) base64url === code_challenge`. Standard. Reject if mismatch or redirect_uri changed.
+4. **access_token == your static MCP_BEARER_TOKEN** — every successful OAuth flow returns the same shared bearer. Your `/api/mcp` keeps the simple Bearer middleware.
+5. **`token_endpoint_auth_method: "none"`** — public client, no client_secret. Bap uses this mode by default.
+6. **Dynamic Client Registration** — Bap doesn't strictly need it, but expose `/oauth/register` anyway since some Bap versions probe it. Just echo back the requested fields with a generated `client_id`.
+
+### Implementation files (copy-paste from `hyperstack-transcribe`)
+
+```
+app/
+├── api/mcp/route.ts                           (your MCP handler, wrapped with bearer middleware)
+├── .well-known/
+│   ├── oauth-protected-resource/route.ts      (RFC 9728 metadata)
+│   └── oauth-authorization-server/route.ts    (RFC 8414 metadata)
+└── oauth/
+    ├── authorize/route.ts                      (signs JWT code, redirects)
+    ├── token/route.ts                          (verifies PKCE, returns bearer)
+    └── register/route.ts                       (DCR echo)
+lib/
+└── oauth.ts                                    (signCode, verifyCode, verifyPkce helpers using jose)
+```
+
+Add `jose` to dependencies for JWT signing:
+```bash
+npm install jose
+```
+
+The `/oauth/authorize` route is the magic — it just signs a code and 302s back. Skeleton:
+
+```ts
+import { signCode } from "@/lib/oauth";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const redirectUri = url.searchParams.get("redirect_uri")!;
+  const state = url.searchParams.get("state") || "";
+  const codeChallenge = url.searchParams.get("code_challenge")!;
+  const codeChallengeMethod = (url.searchParams.get("code_challenge_method") || "S256") as "S256" | "plain";
+
+  const code = await signCode({
+    redirect_uri: redirectUri,
+    code_challenge: codeChallenge,
+    code_challenge_method: codeChallengeMethod,
+    client_id: url.searchParams.get("client_id") || "anonymous",
+    scope: url.searchParams.get("scope") || "mcp",
+  });
+
+  const target = new URL(redirectUri);
+  target.searchParams.set("code", code);
+  if (state) target.searchParams.set("state", state);
+  return NextResponse.redirect(target.toString(), 302);
+}
+```
+
+`/oauth/token` verifies and returns the static bearer:
+
+```ts
+import { verifyCode, verifyPkce, getAccessToken } from "@/lib/oauth";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function POST(req: NextRequest) {
+  // Bap sends application/x-www-form-urlencoded
+  const text = await req.text();
+  const body = Object.fromEntries(new URLSearchParams(text));
+
+  if (body.grant_type === "refresh_token") {
+    return NextResponse.json({
+      access_token: getAccessToken(),
+      token_type: "Bearer",
+      expires_in: 31536000,
+      refresh_token: body.refresh_token,
+      scope: "mcp",
+    });
+  }
+
+  if (body.grant_type !== "authorization_code") {
+    return NextResponse.json({ error: "unsupported_grant_type" }, { status: 400 });
+  }
+
+  const payload = await verifyCode(body.code);
+  if (payload.redirect_uri !== body.redirect_uri) {
+    return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
+  }
+  if (!verifyPkce(body.code_verifier, payload.code_challenge, payload.code_challenge_method)) {
+    return NextResponse.json({ error: "invalid_grant", error_description: "PKCE mismatch" }, { status: 400 });
+  }
+
+  return NextResponse.json({
+    access_token: getAccessToken(),
+    token_type: "Bearer",
+    expires_in: 31536000,
+    refresh_token: getAccessToken(),
+    scope: payload.scope || "mcp",
+  });
+}
+```
+
+The `lib/oauth.ts` helpers (signCode/verifyCode using `jose`, verifyPkce using node crypto sha256) are ~30 lines. See the `hyperstack-transcribe` reference.
+
+### How Bap consumes the OAuth flow
+
+1. User adds the MCP URL in Bap UI (URL only — no auth dropdown shown).
+2. Bap fetches `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`.
+3. Bap POST `/oauth/register` (optional discovery, your endpoint echoes back).
+4. User clicks **Connect OAuth** in the Bap fiche → Bap opens a popup to your `/oauth/authorize?...&code_challenge=...`.
+5. Your endpoint auto-302s back to Bap's `{APP_URL}/api/oauth/callback?code=<JWT>&state=...`.
+6. Bap exchanges at your `/oauth/token` with PKCE verifier → receives the static bearer.
+7. Bap stores the bearer in `workspaceMcpAuthorization.accessToken` and uses it on every `/api/mcp` call.
+8. Status flips to `Connected`. The user never sees a consent screen because step 4→5 is instant.
+
+### Bap redirect URI
+
+Bap uses a fixed redirect URI of the shape `{APP_URL}/api/oauth/callback`. Your `/oauth/authorize` must accept arbitrary `redirect_uri` values (don't whitelist) since `APP_URL` varies per Bap deployment. The JWT-signed code binds the redirect_uri so it can't be tampered with at the token exchange step.
 
 ## Pitfalls
 
@@ -288,6 +422,9 @@ For OAuth, you must expose **both** discovery endpoints and implement the full c
 - **Tool not appearing in coworker** → check that the workspace MCP is enabled for THAT specific coworker (per-coworker toggle).
 - **Token won't validate** → the bearer wrapper does an exact-string equality. Make sure the env var has no trailing newline (Vercel CLI auto-strips it but check).
 - **maxDuration too short** → Vercel cancels at 300s on Hobby. For longer operations, parallelize internally or upgrade to Pro (800s).
+- **Bap UI only shows "Connect OAuth"** (no auth dropdown) → workspace has `fixedMcpAuthType` enabled. Implement the auto-approving OAuth pattern above. Do NOT wait for a Bap UI fix — your MCP just needs the 5 OAuth endpoints to be unblocked.
+- **OAuth flow returns 500 on Connect OAuth** → your `.well-known/oauth-*` endpoints aren't reachable (likely SSO still on, or the routes are in `app/api/.well-known/` instead of `app/.well-known/`). The discovery endpoints MUST be at the origin root.
+- **OAuth code exchange fails with "invalid_grant"** → check PKCE: `sha256(verifier)` base64url-encoded (no padding) must equal `code_challenge`. Common bug: using base64 instead of base64url.
 
 ## When NOT to build an MCP
 
