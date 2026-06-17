@@ -112,7 +112,7 @@ If you don't know the prefix, ask a first chat_run to list available tools and c
 | `user`     | `openai/*`   | ✅ if user connected their ChatGPT account | `This ChatGPT model requires your connected account. Connect it in Settings > Connected AI Account.` |
 | `user`     | `anthropic/*`| ❌ not supported                            | `Model provider "anthropic" does not support auth source "user".` |
 
-Default safe choice in 2026: `openai/gpt-5.4` + `shared`. Premium tiers like `gpt-5.5-pro` regularly disappear from shared connections without notice; if you depend on a specific one, watch the run errors and have a fallback model ready.
+Default safe choice in 2026: **`openai/gpt-5.5` + `shared`**. Earlier in 2026 `gpt-5.4` was the default, but on multi-tool runs with long system prompts (~14 KB) and 3+ wired tools, we now see `gpt-5.4` fail reproducibly with the rule-#9 "non-terminal state" error within ~12 s of generation start. Bumping to `gpt-5.5` clears the failure on the first retry without any other change. Keep `gpt-5.4-mini` in your back pocket for short single-step coworkers (cheaper, faster). Premium tiers like `gpt-5.5-pro` regularly disappear from shared connections without notice; if you depend on a specific one, watch the run errors and have a fallback model ready.
 
 ## 9. Two distinct runtime failures — distinguish them
 
@@ -202,6 +202,94 @@ This **rules out** native bundles like `onnxruntime-node` (~250 MB across the fo
 
 Concrete example: silero-vad ONNX inference is theoretically more accurate than `ffmpeg silenceremove`, but the ONNX bundle blows past Vercel's limit. The energy-based ffmpeg filter ships in 0 extra bytes, runs at ~150× realtime, and breaks the same whisper hallucination loops that motivated VAD in the first place. Ship the working option.
 
+## 15. `app/output.html` opens the agentic-app panel — for free
+
+If your skill writes a single-file HTML document to **exactly** `/app/output.html`, Bap renders it in a sandboxed iframe beside the chat (the `agentic-app` skill contract). You don't need to mention it, attach it, or do anything else — the harness picks it up. The iframe is `allow-scripts allow-forms`; the only way back to the chat is `parent.postMessage({type:"bap:agentic-app-prompt",version:1,prompt:"…"}, "*")`, gated on a real user interaction.
+
+This is the right place to put: interactive quote/invoice editors, dashboards, comparison surfaces — anything where "the artefact is the thing they look at" beats "transcript with file attachments". Combine with rule #1: the bundled script produces the filled HTML deterministically, the agent just calls it.
+
+## 16. Sandbox CLIs fall back when the MCP says "unavailable"
+
+The system-init message on a run often reads:
+
+> Some selected tools are unavailable for this run:
+> - gmail: Gmail MCP tools are unavailable: Workspace MCP Server is not visible to this user.
+
+That refers to the **MCP tool wiring**, not the integration itself. For Gmail, Outlook, Slack and a few others, the sandbox also ships CLI binaries that talk to the same connected account through the integration plumbing. They work:
+
+```bash
+google-gmail --account <label> send \
+  --to "client@example.com" \
+  --subject "..." \
+  --body "..." \
+  --attachment /app/outputs/piece.png \
+  --attachment /app/outputs/devis.pdf
+```
+
+`--account <label>` picks between multiple connected accounts (e.g. `lubin`, `louis`). Without it, the default account is used. Same pattern probably exists for `outlook`, `slack-cli`, etc. — check the sandbox before assuming the MCP failure means no path forward. Tell your agent in the SKILL.md to fall back to the CLI when the MCP route shows unavailable, instead of giving up.
+
+## 17. Inline media and download buttons — both are markdown contracts
+
+Two patterns to surface artefacts in the chat, no API call needed.
+
+**Inline image preview** — write standard markdown:
+
+```markdown
+![Bague or jaune diamant 0,5ct](https://blob.example.com/img.png)
+```
+
+The chat renders with ReactMarkdown + `remarkGfm`, no rehype-sanitize, no `img` override → standard `<img>` element. The URL must be **publicly accessible and stable**. OpenAI's `images/generations` URLs expire in ~1 h — don't paste them, proxy through Vercel Blob or your own MCP first.
+
+**Download buttons** — mention the sandbox path in your message text or markdown:
+
+```
+Output saved to /app/outputs/devis.pdf
+```
+
+Bap's chat scans every assistant message for `/app/...` and `/home/user/...` paths and turns them into clickable download chips. `turnFinalizer.collectAndExposeMentionedSandboxFiles` does the rest. No `attachments[]` to populate, no fileId to register. Just write the file, then mention its path.
+
+## 18. Reference assets bigger than a few KB go to Vercel Blob, not `uploadDocument`
+
+`mcp__bap__coworker_uploadDocument` accepts base64 content inline. The practical ceiling is ~2 KB before the parameter gets truncated/dropped (observed silently). For anything bigger (HTML templates, font files, mock datasets, design tokens, image references), upload to Vercel Blob and `curl` it at the start of the run.
+
+```ts
+// One-shot, anywhere with @vercel/blob access:
+import { put } from '@vercel/blob';
+const blob = await put('templates/devis-template.html', buf, {
+  access: 'public', contentType: 'text/html; charset=utf-8',
+  token: process.env.BLOB_READ_WRITE_TOKEN,
+  addRandomSuffix: false, allowOverwrite: true,
+});
+// Returns: https://<hash>.public.blob.vercel-storage.com/templates/devis-template.html
+```
+
+Then in the SKILL.md:
+
+```bash
+curl -fsSL "https://<hash>.public.blob.vercel-storage.com/templates/devis-template.html" -o /tmp/template.html
+```
+
+Re-upload to update the template; every future run picks it up. No coworker re-deploy, no skill churn. Pairs naturally with rule #1: the template lives in Blob, the bundled Python script fills it.
+
+## 19. Multi-step workflows need explicit validation signals or the LLM stalls
+
+A coworker that does "step 1 → ask user → step 2 → ask user → step 3" will stop after step 1 even if the system prompt says "run all steps". The LLM treats the natural pause point (after rendering an image, after reading a doc, after an MCP call) as a turn boundary and emits a final assistant message.
+
+Two fixes, applied together:
+
+**A. Explicit validation signal list.** Tell the prompt which exact phrases trigger a phase transition, e.g.:
+
+> Validation signals (case-insensitive): "ok", "c'est bon", "je valide", "validée", "on garde", "envoie le devis", "génère le devis", "go". On any of these in the user's reply, immediately proceed to phase 2 without asking anything else.
+
+**B. One-shot test sentinel.** Add a `[MODE TEST]` (or similar) marker that the prompt detects and uses to bypass all interactive pauses. Lets you validate the full pipeline in a single `coworker.run` call without faking user replies between steps:
+
+```
+If userInput contains [MODE TEST] and all phase-2 inputs are present,
+run phase 1 + phase 2 back-to-back without pausing.
+```
+
+Without these two, multi-step coworkers feel "stuck" even though the run completes successfully — the LLM just decided it was done.
+
 ## Build / debug workflow
 
 1. **Design** — write the SKILL.md focused on what the agent *decides*; offload everything mechanical to bundled scripts.
@@ -218,6 +306,10 @@ Concrete example: silero-vad ONNX inference is theoretically more accurate than 
 - Coworker referencing an MCP tool by short name (`transcribe`) instead of namespaced (`transcriptor_transcribe`) — rule #6.
 - Tester running `chat_run` for a multi-minute tool, getting timeout, assuming the tool is broken — rule #7.
 - Retrying a "stopped making progress" run without changing anything — rule #9.
+- Pasting the OpenAI image-generation URL straight into a markdown `![]( )` and discovering the chat is broken an hour later — rule #17.
+- Giving up on a Gmail/Outlook/Slack step because the system-init message says "unavailable" without trying the sandbox CLI — rule #16.
+- Stuffing a 17 KB HTML template into `coworker_uploadDocument` and wondering why the agent only sees the first 2 KB — rule #18.
+- Multi-step coworker that "stops after the first image" — missing validation signals, rule #19.
 
 ## See also
 
