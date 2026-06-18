@@ -1,0 +1,78 @@
+# test_env.example.yaml
+#
+# Template consumed by `bap-coworker-test-loop`. Copy to `test_env.yaml` at the
+# repo root (or wherever your orchestrator looks via `options.testEnvPath`) and
+# fill in your workspace's test accounts, channels and database ids.
+#
+# Two strategies per integration:
+#   - sandbox-redirect : the coworker acts, but on a test target (separate DB,
+#     channel, alias). No cleanup needed; the artefacts live in the sandbox.
+#   - act-then-cleanup : the coworker acts on the normal target, the test
+#     loop reads the created ids from `coworker_logs` and deletes them after
+#     evaluation. Requires the integration to expose a delete operation.
+
+default_strategy: sandbox-redirect
+
+integrations:
+  notion:
+    strategy: sandbox-redirect
+    sandboxDatabaseId: "REPLACE_WITH_TEST_DEALS_DB_UUID"
+    note: "All page.create calls during tests land in this DB. Archived after retentionMinutes."
+
+  linear:
+    strategy: sandbox-redirect
+    sandboxTeamKey: "TEST"
+    note: "Issues created in TEST team. Cancelled after retentionMinutes."
+
+  slack:
+    strategy: sandbox-redirect
+    sandboxChannel: "#test-coworkers"
+    note: "Private channel reserved for build / test traffic. Purge weekly."
+
+  gmail:
+    strategy: sandbox-redirect
+    sandboxAlias: "youralias+test@yourdomain.com"
+    sandboxAccountLabel: "yourlabel-test"
+    note: "Mails sent to the +alias, then trashed after retentionMinutes."
+
+  outlook:
+    strategy: sandbox-redirect
+    sandboxAlias: "outlook-test@yourdomain.com"
+    sandboxAccountLabel: "outlook-test"
+
+  airtable:
+    strategy: act-then-cleanup
+    note: "Delete by record id captured in coworker_logs.events."
+
+  google-drive:
+    strategy: sandbox-redirect
+    sandboxFolderId: "REPLACE_WITH_TEST_FOLDER_ID"
+    note: "Files created under _tests/ folder. Moved to trash after retentionMinutes."
+
+  salesforce:
+    strategy: sandbox-redirect
+    sandboxOrgUrl: "https://your-sandbox.sandbox.my.salesforce.com"
+    note: "Use a Salesforce sandbox org. Never live during tests."
+
+  stripe:
+    strategy: sandbox-redirect
+    sandboxApiKey: "sk_test_REPLACE"
+    note: "Stripe test mode is isolated; no cleanup needed."
+
+  http_custom_mcp:
+    strategy: act-then-cleanup
+    fallback: skip
+    note: "Per-MCP. If no delete endpoint, the test loop skips the cleanup and surfaces a human checkpoint."
+
+# Per-coworker overrides (uncomment to use)
+# overrides:
+#   "@payment-collector":
+#     integrations:
+#       stripe:
+#         strategy: sandbox-redirect
+#         sandboxApiKey: "sk_test_..."
+
+cleanup:
+  archiveInsteadOfDelete: true   # Notion / Linear: prefer soft delete
+  retentionMinutes: 60           # Keep test artefacts for an hour for postmortem
+  cleanupOnFailure: false        # Leave failed-run artefacts in place for debugging
