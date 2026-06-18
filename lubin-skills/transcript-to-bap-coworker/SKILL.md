@@ -398,7 +398,39 @@ Per agent: every `testPayloads[]` entry must be exercised, and every one must co
 
 If any of those fail, the run "completed" but the coworker is broken — do not mark `live`. Iterate via `coworker_update` (prompt / skillSlugs / userInputPrompt) and re-run.
 
-### 6d. Branch on the result
+### 6d. Interactive features — `[MODE TEST]` is not enough, real-receiver run is mandatory
+
+A `[MODE TEST]` run validates that the agent can read the skill, extract the data, and produce the artefact (data.json, panel HTML, etc.). It does **not** validate the parts that only fire on real user interaction or real external writes:
+
+- Panel buttons that postMessage back to the chat (rule #15). MODE TEST renders the panel, but it does not exercise the click → chat → agent reaction loop.
+- Tool calls that the agent is told to *bypass* in MODE TEST (Salesforce write, Gmail send, Notion page create). MODE TEST verifies extraction; it does not verify that the tool name is correct, the integration is wired, the OAuth scope is right, the field mapping matches the target system.
+- Multi-turn flows where the second turn depends on a real reply from the first turn.
+
+For any coworker that has interactive features or real external writes, the test loop must include a **two-phase test**, both mandatory:
+
+| Phase | Sentinel | Receiver / target | Validates |
+|-------|----------|-------------------|-----------|
+| 1. MODE TEST | `[MODE TEST]` | fake email / fake caseId / fake channel | extraction, render, panel exists, structured artefacts present |
+| 2. Real-receiver | (no sentinel) | tester's own email / sandbox CRM org / `#test-bot` Slack channel | button click → chat injection, real tool fires, artefact reaches the target system |
+
+Phase 2 always uses the **tester's own** receiver, never the prospect's. For email coworkers: `contactEmail = lubin@hyperstack.studio` (or whoever's running the test). For CRM coworkers: a sandbox org or a dedicated test case. For Slack coworkers: a `#test-*` channel the tester owns. Sending the prospect a "test" email is never acceptable.
+
+The phase-2 run is gated on a human action when the panel requires a click (rule #15 buttons). The orchestrator surfaces this as a **HUMAN STOP** after phase 1:
+
+```
+[human action required — interactive E2E test]
+Phase 1 (MODE TEST) passed for @sales-followup-drip. Panel rendered, payload extracted.
+Phase 2 needs you to:
+  1. Open the conversation: <link>
+  2. Click "Send" in the panel
+  3. Verify (a) a chat message starting with [SEND EMAIL EXACTLY AS BELOW] appears, (b) the email lands in your inbox
+
+Reply "phase 2 ok" or paste the chat error you see, and I'll mark the coworker live or iterate.
+```
+
+When the agent supports an autonomous test path (auto-approve mode + a deterministic transcript that hits the same code paths), phase 2 can be automated by triggering a second `coworker_run` and watching the logs for the actual `salesforce_*` / `google_gmail_*` tool call to fire. The button-click loop, however, requires a human gesture — no way around it today.
+
+### 6e. Branch on the result
 
 - `status: "success"` and logs check out → mark `live` in the final report.
 - `status: "handoff"` or logs reveal a silent failure → mark `needsReview`, append the diagnosis (which check failed in 6c).
