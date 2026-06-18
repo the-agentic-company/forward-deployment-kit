@@ -202,11 +202,144 @@ This **rules out** native bundles like `onnxruntime-node` (~250 MB across the fo
 
 Concrete example: silero-vad ONNX inference is theoretically more accurate than `ffmpeg silenceremove`, but the ONNX bundle blows past Vercel's limit. The energy-based ffmpeg filter ships in 0 extra bytes, runs at ~150× realtime, and breaks the same whisper hallucination loops that motivated VAD in the first place. Ship the working option.
 
-## 15. `app/output.html` opens the agentic-app panel — for free
+## 15. `app/output.html` opens the agentic-app panel — and how to wire its buttons
 
-If your skill writes a single-file HTML document to **exactly** `/app/output.html`, Bap renders it in a sandboxed iframe beside the chat (the `agentic-app` skill contract). You don't need to mention it, attach it, or do anything else — the harness picks it up. The iframe is `allow-scripts allow-forms`; the only way back to the chat is `parent.postMessage({type:"bap:agentic-app-prompt",version:1,prompt:"…"}, "*")`, gated on a real user interaction.
+If your skill writes a single-file HTML document to **exactly** `/app/output.html`, Bap renders it in a sandboxed iframe beside the chat (the `agentic-app` skill contract). You don't need to mention it, attach it, or do anything else — the harness picks it up. The iframe is `allow-scripts allow-forms`: no `top.location`, no parent DOM access, no cookies, no parent `localStorage`. The only path back to the chat is `parent.postMessage` with the `bap:agentic-app-prompt` envelope.
 
-This is the right place to put: interactive quote/invoice editors, dashboards, comparison surfaces — anything where "the artefact is the thing they look at" beats "transcript with file attachments". Combine with rule #1: the bundled script produces the filled HTML deterministically, the agent just calls it.
+This is the right place to put: interactive quote/invoice editors, dashboards, comparison surfaces — anything where "the artefact is the thing they look at" beats "transcript with file attachments". Combine with rule #1: the bundled script produces the filled HTML deterministically, the agent just calls it. Buttons inside the page let the user trigger the next agent turn without typing.
+
+**Output path is hard-coded — say it explicitly in the render instructions.** Bap picks up only `/app/output.html`. Not `/app/outputs/output.html`, not `/tmp/output.html`, not `/app/output_v2.html`, not `output.html` written from an arbitrary cwd. The SKILL.md must instruct the agent to target that exact absolute path, e.g. `python <path>/render.py data.json /app/output.html`, or, when the agent writes the file directly, `Write to /app/output.html (exact path, no variation)`. Any other location leaves the panel blank with no error, no log, no hint — silent failure.
+
+**UI quality — match the platform, not the prototype.** The panel sits next to the chat on the same screen. Treat it like a polished product surface, not a debug dump.
+
+- **Less info = better.** Cut anything that does not drive the user's next action: timestamps, redundant labels ("EMAIL · DRAFT"), decorative metadata, summaries that repeat content already in the panel. Bap pages get glanced at, not read.
+- **Standardised look across the coworker.** Cards, status pills, primary/secondary buttons in one consistent style across every panel a coworker emits. A tokens block at the top (`--bg`, `--text`, `--primary`, `--ok`, `--warn`) makes this enforceable across runs.
+- **Fill the width, keep prose narrow.** Wide container (1500–1700 px), multi-column grid that collapses to one column under ~1040 px. Long-form text (email body, document preview) keeps a narrow reading column even on big screens.
+- **No fake chrome.** No app header, no sidebar, no footer signature, no tab bar. The panel is the inside of a surface, not its own app.
+- **Real tool schemas + deep-links.** When the page shows tickets, statuses, fields, use the actual target-tool names and choice IDs (Airtable single-select values, Linear status names) plus an `↗` to the live record. Faked field names cost trust.
+- **Concrete editing, not decorative.** Editable values are real `<input>` / `<textarea>` / `<select>` / `contenteditable`, not styled text that looks editable. A button labelled "Edit" toggles edit mode; a button labelled "Send" / "Create" sends. Never combine "Edit & Send" on one button.
+
+A shared design system for these panels (tokens, components, layout primitives reused across coworkers) is the next step and is not yet validated. Until it is, write each panel as if a client were seeing it on a 27-inch screen — same bar as a polished SaaS product page.
+
+**The contract.** A button in the page is a transcript-injector. A click sends `postMessage` to the parent, the parent injects the `prompt` field as a new user message in the chat, the coworker reacts as if the user had typed it.
+
+Send (iframe to parent), fired on a real click:
+
+```js
+parent.postMessage({
+  type: 'bap:agentic-app-prompt',
+  version: 1,
+  prompt: 'Send the email to client@example.com'
+}, '*');
+```
+
+Receive (parent to iframe), delivered after the parent processes the message:
+
+```js
+window.addEventListener('message', (event) => {
+  if (event.data?.type !== 'bap:agentic-app-prompt-result') return;
+  // event.data.status === 'sent'     → prompt was accepted and injected
+  // event.data.status === 'rejected' → user declined, re-enable the button
+});
+```
+
+`type` must be exactly `'bap:agentic-app-prompt'`. `version` is `1`. `targetOrigin` stays `'*'`: the agent doesn't know the parent URL at write time. Do not validate `event.origin` either; the parent serves from `heybap.com`, workspace subdomains, or preview URLs.
+
+**User-activation gating.** The browser's user-activation rule applies. Bap will not deliver a `bap:agentic-app-prompt` that fires on page load, on `setTimeout`, in `MutationObserver`, or in any handler not triggered by a real gesture. Bind on `'click'`, do not wrap `postMessage` in `setTimeout` (even 0 ms; the gesture is consumed), and if you need an animation before sending, chain it inside the same handler via `transitionend` or `animationend`. Past one async hop, Safari drops the gesture.
+
+**Pattern: validate / reject.** Disable both buttons on either click; a double-click on the wrong one is the most common production bug here.
+
+```html
+<button id="approve">Send</button>
+<button id="reject">Cancel</button>
+<script>
+function send(prompt) {
+  document.querySelectorAll('button').forEach(b => b.disabled = true);
+  parent.postMessage({type: 'bap:agentic-app-prompt', version: 1, prompt}, '*');
+}
+document.getElementById('approve').onclick = () => send('Approved. Send the draft above.');
+document.getElementById('reject').onclick = () => send('Rejected. Discard the draft and ask me again with my edits.');
+</script>
+```
+
+**Pattern: edit then submit.** Let the user edit a `<textarea>` or `contenteditable` field, then submit the edited content. Strip backticks to avoid breaking the markdown fence inside the prompt:
+
+```js
+document.getElementById('send').addEventListener('click', function () {
+  this.disabled = true;
+  const body = document.getElementById('body').value.replace(/`/g, "'");
+  parent.postMessage({
+    type: 'bap:agentic-app-prompt',
+    version: 1,
+    prompt: 'Send this exact body (do not rephrase):\n\n```\n' + body + '\n```'
+  }, '*');
+});
+```
+
+**Pattern: pick one of N.** Mark the chosen button visually before sending so the user feels the click registered before the agent reacts. The iframe goes inert until the next `output.html` is generated.
+
+```js
+document.querySelectorAll('button[data-prompt]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('button[data-prompt]').forEach(b => b.disabled = true);
+    btn.classList.add('chosen');
+    parent.postMessage({type: 'bap:agentic-app-prompt', version: 1, prompt: btn.dataset.prompt}, '*');
+  });
+});
+```
+
+**Pattern: structured payload.** For pages where the user edits many fields (a devis with line items, a calendar event with attendees), snapshot the state to JSON and embed it inside a markdown fence in the prompt with a tag header. Lets the agent re-derive intent from one payload rather than from prose:
+
+```js
+const payload = snapshotState();  // {entreprise, client, lignes:[{matiere, prix, qte}, ...], marge, tva, ...}
+parent.postMessage({
+  type: 'bap:agentic-app-prompt',
+  version: 1,
+  prompt: `[REGENERATE DEVIS]
+
+The user edited values in the mini-app. Use STRICTLY the values below, do not re-generate the image at /app/outputs/piece.png. Re-send the email to client_email with the regenerated PDF.
+
+\`\`\`json
+${JSON.stringify(payload, null, 2)}
+\`\`\``
+}, '*');
+```
+
+Used in production by the BATIMGIE `devis-generateur` template: 30+ fields round-tripped through one click without prose-encoding each one.
+
+**Result handling.** Known statuses on `bap:agentic-app-prompt-result`:
+
+| status | meaning | what to do |
+|--------|---------|------------|
+| `'sent'` | prompt was injected into the chat | optimistic "Sent ✓" flip, then treat the iframe as stale |
+| `'rejected'` | user declined the prompt | re-enable buttons, show a discreet hint |
+
+Once accepted, the current `output.html` is stale: the next agent turn may regenerate it with new state. Do not try to mutate the iframe DOM to reflect "Sent ✓" and expect it to stay correct beyond the optimistic flip.
+
+**Timeout fallback.** If the page is opened outside of Bap (local file, preview without shell), the parent never replies. Pair every `postMessage` with a 5 s timeout that re-enables the button, plus a one-shot listener that removes itself once the ack arrives (avoids stale state on multi-button pages):
+
+```js
+let acked = false;
+const onAck = (e) => {
+  if (!e.data || e.data.type !== 'bap:agentic-app-prompt-result') return;
+  acked = true;
+  window.removeEventListener('message', onAck);
+  // handle e.data.status...
+};
+window.addEventListener('message', onAck);
+parent.postMessage({type: 'bap:agentic-app-prompt', version: 1, prompt}, '*');
+setTimeout(() => { if (!acked) { btn.textContent = 'Retry'; btn.disabled = false; } }, 5000);
+```
+
+**Gotchas.**
+
+1. `parent` vs `window.parent`: same reference, both work.
+2. No `type="module"`: the iframe runs the inline `<script>` as a classic script. No top-level `await`, no `import`. Wrap in an IIFE if you need scope.
+3. Forms do nothing: `allow-forms` is granted, but a native `<form>` submit produces no `postMessage`. Always intercept with JS, `e.preventDefault()`, then `postMessage`.
+4. Long prompts cap at a few KB. For a full edited document, summarise the action ("Send the body as edited in the panel") and let the agent re-read the artifact from the sandbox.
+5. Localhost vs prod URLs: chat conversation IDs differ between local dev and prod. A `localhost` `output.html` cannot be opened against a prod conversation, and a prod page cannot be loaded standalone in a browser without the parent shell.
+6. Iframe inertness after click: once a prompt is injected, the iframe is read-only from the user's perspective until the agent regenerates it. Do not promise live updates inside the iframe; do not poll for an answer.
+7. Curly apostrophes (’) in French copy are safe in template literals or single-quoted strings. ASCII `'` inside an ASCII `'…'` will break the string.
 
 ## 16. Sandbox CLIs fall back when the MCP says "unavailable"
 
