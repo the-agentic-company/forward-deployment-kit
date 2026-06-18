@@ -518,6 +518,28 @@ Si (b) ok mais (c) non → mauvais nom de tool namespacé (rule #6) ou intégrat
 
 This contract is now baked into the canonical templates (`build-agents-for-bap/templates/`). When you write a panel coworker, copy the test contract from the template's matching SKILL.md, fill the target tool name and the prefix, and run both phases before declaring live.
 
+## 23. `type="button"` is mandatory on every `<button>` in an agentic-app panel
+
+Without an explicit `type` attribute, a `<button>` element defaults to `type="submit"`. Inside the Bap agentic-app iframe, this default has a quiet but lethal consequence: the click event fires, JavaScript runs to completion (button visually disables, `parent.postMessage` is called), but the parent React app silently discards the prompt. No chat injection. No error. The button just greys out for 5 s, the user clicks again, same result.
+
+Observed on `sales-followup-drip` v1 (2026-06-18): three buttons (Send / Edit / Cancel) shipped without `type="button"`. Click → button greyed → no message in chat. The reference test panel that Lubin ships (`output-2.html`) had `type="button"` explicit and worked nominally. v2 added `type="button"` and the postMessage went through.
+
+**The rule.** Every `<button>` in `/app/output.html` (or any panel HTML the agent writes) carries `type="button"` explicitly:
+
+```html
+<button type="button" class="btn btn-primary" id="send">Send</button>
+<button type="button" class="btn btn-ghost"   id="edit">Edit</button>
+<button type="button" class="btn btn-secondary" id="cancel">Cancel</button>
+```
+
+No exceptions. Even when there is no `<form>` ancestor (and there usually isn't), the default-submit behaviour is intercepted by something in Bap's UI surface and the postMessage gets dropped. The canonical template `templates/email-validate.html` was missing this and is now fixed.
+
+**Diagnostic, when a panel button greys but no chat message appears:**
+
+1. Inspect the panel HTML via devtools. Every `<button>` should have `type="button"`. If any defaults to submit, fix it.
+2. Open the panel iframe in `chrome://inspect`, click Send, watch the network panel for the postMessage event. If it fires but no chat injection happens upstream, escalate to Baptiste with the timestamps.
+3. Check the panel's console for hydration errors (React #418 with `args[]=HTML` is a known symptom — usually downstream of the type=submit gotcha).
+
 ## Build / debug workflow
 
 1. **Design** — write the SKILL.md focused on what the agent *decides*; offload everything mechanical to bundled scripts.
@@ -542,6 +564,7 @@ This contract is now baked into the canonical templates (`build-agents-for-bap/t
 - Reporting a coworker as "live" without reading `coworker_logs` for the test run. Status `completed` ≠ agent did the right thing — read the events, see what fired.
 - MODE TEST contract phrased as "log the data in chat and simulate" — rule #21. The agent will read the skill, decide there's nothing to do, and emit a 300-token ack. Make the simulation produce real files in the sandbox.
 - Marking a panel-using coworker `live` after a MODE TEST run because `/app/output.html` appeared in `sandboxFiles`. Rule #22. MODE TEST renders the panel; it does not validate that clicking Send reaches the chat or that Gmail actually sends. Run a phase-2 test with your own email as receiver before declaring done.
+- Writing `<button>Send</button>` instead of `<button type="button">Send</button>` in a panel — rule #23. The default is submit, the postMessage gets dropped silently, the button greys and nothing happens. Always set type=button explicitly on every panel button.
 
 ## See also
 
