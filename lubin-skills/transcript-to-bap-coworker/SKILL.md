@@ -493,9 +493,30 @@ The pipeline can be re-invoked with `{ resumeCallId: "<callId>", action: "mcp-bo
 - Putting the call-specific prospect name in the skill slug. Slugs are workspace-global; use the workflow domain (`sales-call-debrief-writer`), not the prospect (`acme-debrief-writer`).
 - Reporting `live` for a coworker that has `needsReview` items. The report distinguishes them deliberately so the human knows what to inspect.
 
+## Report HeyBap bugs and feature gaps (mandatory, all steps)
+
+The orchestrator is the only place in the pipeline that touches HeyBap at every level: spec extraction, MCP scaffolding and binding, skill upload, coworker creation, run / log / update, panel rendering, report persistence. You see the whole stack misbehave or fail to expose a needed capability. Surface every finding through the `bap-bug-report` skill: it analyses the Bap repo (the-agentic-company/bap) and posts a structured note to Slack in `#bugs` or `#feature-request` (workspace The Agentic Company) with @Baptiste pinged at the start.
+
+One finding equals one invocation. A one-line description is enough; `bap-bug-report` does the deep investigation itself. Do not batch findings; do not wait until "the end of the pipeline"; do not silently route around. Baptiste asked explicitly for tight feedback in the 2026-06-18 daily sync, and the orchestrator is the most concentrated source of HeyBap signal that exists.
+
+Triggers per step:
+
+- **Step 1 (parse).** Whatever `parse-transcript-to-agent-spec` would otherwise surface as a platform gap (see its own section).
+- **Step 2 (resolve tools).** A `neededTools[]` item should have been a native integration but you had to downgrade to `custom_mcp_to_build`. Name the missing integration as a feature request. `workspaceMcpServerIds` cannot be resolved because there is no listing API: feature request (also explicit in step 2b).
+- **Step 2b (build custom MCP).** The HUMAN STOP on workspace MCP bind is the single biggest friction of the whole pipeline. File the feature request once per session: "programmatic workspace MCP server creation + bind (URL, auth, OAuth) without UI". Also file a feature request if `Connect OAuth` fails on a freshly deployed MCP that passes the curl smoke-test (workspace-side regression).
+- **Step 3 (generate skill folder).** The HTML postMessage protocol (`bap:agentic-app-prompt`) has no schema introspection. There is no way to declaratively list "what actions a panel can send". Feature request. Also flag any panel-rendering bug observed during dry-run inspection.
+- **Step 4 (`skill_add`).** Returns 200 but the skill is not immediately visible to coworkers (async indexing window not documented). Bug or doc gap. `skill_add` cannot replace an existing skill with the same slug without manual delete first: feature request.
+- **Step 5 (`coworker_create`).** Rejects unknown `workspaceMcpServerIds` silently or with an opaque error: bug. No way to attach the `agentSpec` JSON as first-class coworker metadata (every run regenerates the test overlay from the on-disk spec file): feature request. `coworker_create` does not accept a `schedule` matching the spec's `triggers[].spec` shape one-to-one: surface the gap.
+- **Step 6 (test loop).** Whatever `bap-coworker-test-loop` would otherwise surface (see its own section).
+- **Step 7 (report).** The final report cannot be persisted as a HeyBap entity; it lands in Slack and on disk only. Feature request: a `coworker.buildReport` first-class object queryable from the UI.
+- **Resume after human action.** No webhook from HeyBap to notify the orchestrator that the workspace MCP bind happened. Feature request.
+
+If at any step you find yourself writing a comment like "TODO: HeyBap should support X" in code or in the report, that comment is the bug report. File it.
+
 ## See also
 
 - [parse-transcript-to-agent-spec](../parse-transcript-to-agent-spec/SKILL.md): step 1 of this pipeline.
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): step 6 of this pipeline.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): the rule set the generated coworker must follow. Cited inline throughout (rules #1, #2, #4, #6, #8, #10, #15, #16, #18, #19).
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): called in step 2b when a custom MCP is needed.
+- `bap-bug-report`: invoke at every step where the platform falls short (see the section above).

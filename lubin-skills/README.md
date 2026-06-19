@@ -56,3 +56,9 @@ invoke transcript-to-bap-coworker
 ```
 
 The orchestrator emits a Markdown report at the end listing live coworkers, items needing human review, and any MCP that needs manual UI binding (Bap currently has no programmatic API for that step).
+
+## Reporting HeyBap bugs and feature gaps
+
+Each pipeline skill (`parse-transcript-to-agent-spec`, `bap-coworker-test-loop`, `transcript-to-bap-coworker`) has a dedicated "Report HeyBap bugs and feature gaps" section that mandates invoking the `bap-bug-report` skill whenever a platform misbehaviour, missing API, or feature gap is observed. The orchestrator does not silently route around platform limitations; it surfaces each finding to Slack (`#bugs` or `#feature-request`, workspace The Agentic Company, @Baptiste pinged at the start).
+
+This keeps the feedback loop tight between forward-deployment work and the HeyBap roadmap. If you fork this kit and run it on your own workspace, replace the `bap-bug-report` invocation with your own equivalent (or drop it).

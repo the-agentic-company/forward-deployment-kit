@@ -329,9 +329,24 @@ If `goal` or `steps[]` can't be derived at all, do not emit the agent. Push it t
 - Forcing a voice-triage / live-copilot / BI-dashboard ask into a low-confidence agent because "we can try". Rule #9 — these belong in `discardedCandidates` with a one-line platform-fit reason and (optionally) an `ambiguities[]` entry pointing at the right downstream platform.
 - Emitting one super-agent for "summary + CRM + insights + follow-up + dashboard". Decompose per rule #9: group items that share trigger + input + destination, separate items that have a different trigger or different human in the loop, discard items that fail platform fit.
 
+## Report HeyBap bugs and feature gaps
+
+This skill reads transcripts in a way that surfaces what the platform *cannot* do today. Every time you encounter a HeyBap capability gap or a misbehaviour, invoke the `bap-bug-report` skill immediately. It analyses the Bap repo (the-agentic-company/bap) and posts a structured note to Slack in `#bugs` or `#feature-request` (workspace The Agentic Company), pinging Baptiste at the start. One finding equals one invocation; a one-line description is enough, `bap-bug-report` does the deep investigation itself.
+
+Specific triggers from this skill:
+
+- The transcript describes a workflow that needs a capability HeyBap does not expose yet (Grain webhook trigger, conditional schedule, sub-coworker spawning, sandbox-native test mode, first-class agentSpec storage). Feature request.
+- A `neededTools[]` item gets classified `existing_workspace_mcp` but there is no public listing API to verify it, so you must ask the human. Feature request.
+- A `neededTools[]` item that should be a native integration (Grain, Notion sub-DB routing, Linear cycle sync) is downgraded to `custom_mcp_to_build` because the integration is missing. Feature request, name the integration.
+- The parser would benefit from a HeyBap-side schema for the agent spec (store the JSON on the coworker as metadata, version it, regenerate from transcript) so the orchestrator does not maintain its own `${skillFolderRoot}/<callId>/agent-spec.json`. Feature request.
+- Any time the transcript references a HeyBap action you remember being broken (skill upload race, `awaiting_user_input` regression, panel not refreshing, etc.). Bug.
+
+Do not silently downgrade into `ambiguities[]` or `discardedCandidates[]` when the real story is "the platform should let me do this". The two arrays are for legitimate scope decisions; platform gaps go to `bap-bug-report`.
+
 ## See also
 
 - [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md): the orchestrator that consumes this JSON and produces a deployed coworker.
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): the test harness that reads `successCriteria` and `testPayloads` to validate the coworker post-deploy.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): rules the generated coworker must follow at build time. Rules #6, #8, #12, #19 are referenced directly in the schema above.
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): triggered when `neededTools[].kind == "custom_mcp_to_build"`.
+- `bap-bug-report`: invoke whenever this skill exposes a HeyBap gap (see the section above).
