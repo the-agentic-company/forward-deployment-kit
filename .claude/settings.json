@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash(gh *)",
+      "Bash(git *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(vercel *)",
+      "Bash(curl *)",
+      "Bash(jq *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(mkdir *)",
+      "Bash(cd *)",
+      "Bash(claude *)",
+      "Bash(test *)",
+      "Bash(wc *)",
+      "Bash(file *)",
+      "Bash(readlink *)",
+      "Bash(base64 *)",
+      "Bash(openssl *)",
+      "Bash(awk *)",
+      "Bash(sed *)",
+      "Bash(diff *)",
+      "Bash(scripts/*)",
+      "mcp__bap__*",
+      "mcp__bap-prod__*",
+      "mcp__bap-staging__*",
+      "mcp__bap-local__*",
+      "mcp__Claude_in_Chrome__*",
+      "mcp__aa816864-db59-4de1-a375-68c8cccbfe71__*",
+      "mcp__7af629ef-2acd-46e4-b254-28e406010afe__*",
+      "mcp__linear__*"
+    ]
+  }
+}

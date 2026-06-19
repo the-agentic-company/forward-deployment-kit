@@ -74,7 +74,35 @@ The pipeline skills assume:
 
 ## Running the full pipeline
 
-From Claude Code, with a transcript in `/tmp/grain-export.txt`:
+### Manual trigger, autonomous after (one-line)
+
+The FDK repo ships a wrapper script and a pre-approved `.claude/settings.json` so the pipeline can run end-to-end without permission prompts:
+
+```bash
+scripts/build-from-transcript.sh /tmp/grain-export.txt "Concentrix" discovery
+```
+
+Or with a Grain URL directly:
+
+```bash
+scripts/build-from-transcript.sh "https://grain.com/share/abc-123" "Eden Red"
+```
+
+Or piping inline text:
+
+```bash
+scripts/build-from-transcript.sh - "Acme" < /tmp/transcript.txt
+```
+
+The wrapper invokes `claude -p` from the FDK root, hands the transcript to `transcript-to-bap-coworker`, and the orchestrator runs the full chain autonomously. Logs land in `.run-logs/build-<timestamp>.log`.
+
+What "autonomous after" means concretely:
+
+- No permission prompt for any of the tools needed (`mcp__bap__*`, `mcp__Claude_in_Chrome__*`, Slack MCP, Notion MCP, Linear MCP, `gh`, `git`, `npx playwright`, `vercel`, `curl`, `jq`, etc.). The `.claude/settings.json` allowlist is shared with the team, `.claude/settings.local.json` is gitignored for personal overrides.
+- HUMAN STOPs (workspace MCP bind, panel E2E click) are *documented* in the final report instead of blocking the run. `stopOnFirstHumanCheckpoint` is false in this mode.
+- HeyBap findings observed during the run route through `bap-finding-router` automatically.
+
+### Direct invocation (without the wrapper)
 
 ```
 invoke transcript-to-bap-coworker
@@ -83,7 +111,18 @@ invoke transcript-to-bap-coworker
   options: { maxAgents: 3, testEnvPath: "./test_env.yaml" }
 ```
 
-The orchestrator emits a Markdown report at the end listing live coworkers, items needing human review, and any MCP that needs manual UI binding (Bap currently has no programmatic API for that step).
+Useful from inside a Claude Code session when you want to interact with the run as it progresses.
+
+### Prerequisites for the autonomous run
+
+- `claude` CLI on `$PATH` with a valid auth (`claude setup-token` or interactive login).
+- `gh` CLI authenticated on the `the-agentic-company` org (`gh auth status`).
+- `mcp__bap__*` MCP server enabled. The `.claude/settings.local.json` typically lists `bap-prod` (and optionally `bap-staging`, `bap-local`).
+- Slack, Notion and Linear MCPs available in the workspace (already standard in Lubin's setup).
+- A `test_env.yaml` at the repo root with sandbox routing (see `lubin-skills/test_env.example.yaml`).
+- For Mode C of `bap-post-deploy-verify`: `npm install` inside `lubin-skills/bap-post-deploy-verify/` and a one-shot `npm run auth:bootstrap` for the HeyBap Playwright session.
+
+The orchestrator emits a Markdown report at the end listing live coworkers, items needing human review, MCPs awaiting manual bind, and findings dispatched. The report path is logged as the last line.
 
 ## Reporting HeyBap bugs and feature gaps
 
