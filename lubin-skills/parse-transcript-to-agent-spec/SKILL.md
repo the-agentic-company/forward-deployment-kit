@@ -331,7 +331,7 @@ If `goal` or `steps[]` can't be derived at all, do not emit the agent. Push it t
 
 ## Report HeyBap bugs and feature gaps
 
-This skill reads transcripts in a way that surfaces what the platform *cannot* do today. Every time you encounter a HeyBap capability gap or a misbehaviour, invoke the `bap-bug-report` skill immediately. It analyses the Bap repo (the-agentic-company/bap) and posts a structured note to Slack in `#bugs` or `#feature-request` (workspace The Agentic Company), pinging Baptiste at the start. One finding equals one invocation; a one-line description is enough, `bap-bug-report` does the deep investigation itself.
+This skill reads transcripts in a way that surfaces what the platform *cannot* do today. Every time you encounter a HeyBap capability gap or a misbehaviour, invoke [bap-finding-router](../bap-finding-router/SKILL.md). The router classifies the finding (SIMPLE vs COMPLEX) and dispatches to the right leaf: `bap-bug-report` for SIMPLE (opens a PR on `the-agentic-company/bap`, notifies `#technical-pr`) or `bap-feature-brainstorm` for COMPLEX (posts a 3-options problem statement in `#brainstorming-produit`). One finding equals one invocation. Do not invoke `bap-bug-report` or `bap-feature-brainstorm` directly from this skill; the router is the only entry point.
 
 Specific triggers from this skill:
 
@@ -341,7 +341,7 @@ Specific triggers from this skill:
 - The parser would benefit from a HeyBap-side schema for the agent spec (store the JSON on the coworker as metadata, version it, regenerate from transcript) so the orchestrator does not maintain its own `${skillFolderRoot}/<callId>/agent-spec.json`. Feature request.
 - Any time the transcript references a HeyBap action you remember being broken (skill upload race, `awaiting_user_input` regression, panel not refreshing, etc.). Bug.
 
-Do not silently downgrade into `ambiguities[]` or `discardedCandidates[]` when the real story is "the platform should let me do this". The two arrays are for legitimate scope decisions; platform gaps go to `bap-bug-report`.
+Do not silently downgrade into `ambiguities[]` or `discardedCandidates[]` when the real story is "the platform should let me do this". The two arrays are for legitimate scope decisions; platform gaps go through `bap-finding-router`.
 
 ## See also
 
@@ -349,4 +349,4 @@ Do not silently downgrade into `ambiguities[]` or `discardedCandidates[]` when t
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): the test harness that reads `successCriteria` and `testPayloads` to validate the coworker post-deploy.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): rules the generated coworker must follow at build time. Rules #6, #8, #12, #19 are referenced directly in the schema above.
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): triggered when `neededTools[].kind == "custom_mcp_to_build"`.
-- `bap-bug-report`: invoke whenever this skill exposes a HeyBap gap (see the section above).
+- [bap-finding-router](../bap-finding-router/SKILL.md): single entry point for every HeyBap finding observed during parsing (see the section above).

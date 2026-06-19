@@ -495,9 +495,9 @@ The pipeline can be re-invoked with `{ resumeCallId: "<callId>", action: "mcp-bo
 
 ## Report HeyBap bugs and feature gaps (mandatory, all steps)
 
-The orchestrator is the only place in the pipeline that touches HeyBap at every level: spec extraction, MCP scaffolding and binding, skill upload, coworker creation, run / log / update, panel rendering, report persistence. You see the whole stack misbehave or fail to expose a needed capability. Surface every finding through the `bap-bug-report` skill: it analyses the Bap repo (the-agentic-company/bap) and posts a structured note to Slack in `#bugs` or `#feature-request` (workspace The Agentic Company) with @Baptiste pinged at the start.
+The orchestrator is the only place in the pipeline that touches HeyBap at every level: spec extraction, MCP scaffolding and binding, skill upload, coworker creation, run / log / update, panel rendering, report persistence. You see the whole stack misbehave or fail to expose a needed capability. Surface every finding through [bap-finding-router](../bap-finding-router/SKILL.md). The router classifies (SIMPLE vs COMPLEX) and dispatches to `bap-bug-report` (opens a PR on `the-agentic-company/bap`, notifies `#technical-pr`) or `bap-feature-brainstorm` (posts a 3-options problem statement in `#brainstorming-produit`).
 
-One finding equals one invocation. A one-line description is enough; `bap-bug-report` does the deep investigation itself. Do not batch findings; do not wait until "the end of the pipeline"; do not silently route around. Baptiste asked explicitly for tight feedback in the 2026-06-18 daily sync, and the orchestrator is the most concentrated source of HeyBap signal that exists.
+One finding equals one invocation. A one-line description is enough; the router and its downstream skills do the deep investigation themselves. Do not invoke the leaf skills directly; do not batch findings; do not wait until "the end of the pipeline"; do not silently route around. Baptiste asked explicitly for tight feedback in the 2026-06-18 daily sync, and the orchestrator is the most concentrated source of HeyBap signal that exists.
 
 Triggers per step:
 
@@ -519,4 +519,4 @@ If at any step you find yourself writing a comment like "TODO: HeyBap should sup
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): step 6 of this pipeline.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): the rule set the generated coworker must follow. Cited inline throughout (rules #1, #2, #4, #6, #8, #10, #15, #16, #18, #19).
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): called in step 2b when a custom MCP is needed.
-- `bap-bug-report`: invoke at every step where the platform falls short (see the section above).
+- [bap-finding-router](../bap-finding-router/SKILL.md): invoke at every step where the platform falls short (see the section above).

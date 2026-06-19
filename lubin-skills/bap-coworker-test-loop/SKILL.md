@@ -379,7 +379,7 @@ assistant.messages.last contains "Je ne peux pas..."
 
 ## Report HeyBap bugs and feature gaps
 
-The test loop is the most concentrated source of HeyBap-side signal in the pipeline. Every iteration that *patches around* a platform misbehaviour is a finding you should report. Invoke the `bap-bug-report` skill: it analyses the Bap repo (the-agentic-company/bap) and posts a structured note to Slack in `#bugs` or `#feature-request` (workspace The Agentic Company) with @Baptiste pinged. One finding equals one invocation; a one-line description is enough.
+The test loop is the most concentrated source of HeyBap-side signal in the pipeline. Every iteration that *patches around* a platform misbehaviour is a finding you should report. Invoke [bap-finding-router](../bap-finding-router/SKILL.md). The router classifies the finding (SIMPLE vs COMPLEX) and dispatches to `bap-bug-report` (opens a PR on `the-agentic-company/bap`, notifies `#technical-pr`) or `bap-feature-brainstorm` (posts a 3-options problem statement in `#brainstorming-produit`). One finding equals one invocation. Do not invoke the leaf skills directly.
 
 Specific triggers from this skill:
 
@@ -401,4 +401,4 @@ Do not retry quietly. Surface every structural finding.
 - [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md): the orchestrator that calls this skill at the end.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): rules referenced throughout (#1, #5, #6, #7, #8, #9, #11, #15, #16, #19).
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): when the diagnose step says "the MCP itself is the bug", fix lives there.
-- `bap-bug-report`: invoke whenever a diagnose step concludes the root cause is in HeyBap (see the section above).
+- [bap-finding-router](../bap-finding-router/SKILL.md): invoke whenever a diagnose step concludes the root cause is in HeyBap (see the section above).
