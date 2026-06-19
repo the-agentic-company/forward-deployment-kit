@@ -110,7 +110,37 @@ For every diagnosis, produce:
 
 Sections can be omitted if genuinely empty (e.g. no compounding factor, no alternatives worth listing). Never fabricate a section to fill space.
 
-## Step 5 — auto-post to Slack (mandatory, autonomous)
+## Step 5 — dedup check (mandatory, before posting)
+
+Before sending anything, search Slack to make sure the same bug or feature has not already been reported. Posting a duplicate is worse than no message at all.
+
+**Where to search**:
+
+- The target channel only (`#bugs` for bugs, `#feature-request` for features). Cross-channel noise is not relevant.
+- Time window: the last 60 days is usually enough. Older than that, the report is stale anyway and a fresh one is fine.
+
+**How to search**:
+
+Use `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_search_public` (or `slack_search_public_and_private` if the channel is private) with a query built from the most distinctive tokens of the bug. Pick tokens that are unlikely to collide with unrelated reports. In order of preference:
+
+1. A specific file path or symbol from the diagnosis (e.g. `prompt-bar.tsx`, `MAX_FILE_SIZE`, `agentic-app-prompt`, `coworker-info-panels`).
+2. A unique noun phrase from the symptom (e.g. `m4a attachment`, `audio attachment`, `button postMessage`).
+3. The Slack channel filter syntax: `in:#bugs <terms>` or `in:#feature-request <terms>`.
+
+Run 2 to 3 short queries with different angles, not one long query. Slack search is keyword-based, not semantic.
+
+**Decide**:
+
+- **No match** → proceed to Step 6 (post).
+- **Likely match** (same file paths or same symptom, posted by anyone, not just the user) → **do not post**. Return to the user:
+  1. A one-line note: `Already reported: <permalink to the existing Slack message> by <author> on <date>.`
+  2. The draft message that would have been posted, so the user can decide to reply in-thread or force a repost.
+  3. Do not call `slack_send_message` at all in this branch.
+- **Borderline** (one shared keyword but different root cause) → proceed to post, but mention in your return-to-user note that a possibly-related thread exists, with the permalink.
+
+Never silently skip the post without telling the user. Never post when a clear duplicate exists.
+
+## Step 6 — auto-post to Slack (mandatory, autonomous)
 
 The skill posts the message itself, autonomously, to the **The Agentic Company** Slack workspace. No draft, no confirmation step. The user explicitly asked for this.
 
@@ -139,7 +169,7 @@ Use `slack_send_message`, **never** `slack_send_message_draft` — the user want
 
 **Resolving IDs if they ever drift**: re-run `slack_search_users` for "Baptiste" and `slack_search_channels` for "bug" / "feature-request" inside the workspace **The Agentic Company**. The current logged-in account is the user's own. If multiple bug channels appear, prefer the canonical `#bugs` (general), not product-specific variants like `#bugs-hermes`.
 
-## Step 6 — return to the user
+## Step 7 — return to the user
 
 Return to the user, in this exact shape:
 
