@@ -45,14 +45,32 @@ gh repo clone the-agentic-company/bap /tmp/bap-bug-$(date +%s)
 
 Never investigate from the GitHub web UI alone for anything non-trivial. The local clone is needed for multi-file grep and asymmetry checks.
 
-## Step 2 — investigate in depth (use the Agent tool)
+## Step 2 — reproduce in the live product (Chrome MCP, when relevant)
+
+For any UI / UX / layout / interaction / visual bug, **reproduce the issue live in https://heybap.com before concluding**. Static code reading alone misses half the picture (overflow, z-index, layout collapse, hover states, transition glitches, race conditions on load).
+
+Use the Claude-in-Chrome MCP tools (`mcp__Claude_in_Chrome__*`):
+
+- `mcp__Claude_in_Chrome__navigate` to https://heybap.com and reach the relevant route (sign in if needed, the user's session should already be authenticated in the browser).
+- Reproduce the user's exact scenario: open the run, the coworker, the HTML output, the attachment flow, whatever the bug describes.
+- `mcp__Claude_in_Chrome__preview_screenshot` (or `computer` action) to capture the broken state. Take 1 to 3 screenshots: one wide shot of the broken layout, one zoomed shot of the offending element, one of the working baseline for comparison if relevant.
+- `mcp__Claude_in_Chrome__read_console_messages` and `read_network_requests` to catch silent errors, 4xx/5xx, or unexpected payloads.
+- Use `find` / `javascript_tool` to probe DOM state, computed styles, dataset attributes when needed.
+- Save screenshot file paths. Include them in the return-to-user output so they can be attached to the Slack thread manually if relevant. (The Slack MCP available here does not upload files; do not try.)
+
+Skip Chrome reproduction only when the bug is purely backend / non-visual (e.g. a webhook silently dropping events, an MCP tool returning wrong JSON). In that case, justify the skip in one line.
+
+The visual evidence from Chrome should **refine the diagnosis**, not replace the code-level root cause. Both are required for any UI bug.
+
+## Step 3 — investigate the codebase in depth (use the Agent tool)
 
 Delegate the investigation to a subagent (`general-purpose` or `Explore`) with a self-contained briefing that includes:
 
 - The exact bug / feature description from the user.
 - The repo path on disk.
 - The known monorepo layout above.
-- An instruction to check **both** the chat surface and the coworker surface when the issue could exist in either (asymmetry between the two is a common Bap pattern — see the postMessage / agentic-app-prompt bug and the attachment size bug as historical examples).
+- The Chrome reproduction findings from Step 2 (screenshots, console errors, computed styles) so the subagent can target the exact symptom.
+- An instruction to check **both** the chat surface and the coworker surface when the issue could exist in either (asymmetry between the two is a common Bap pattern, see the postMessage / agentic-app-prompt bug and the attachment size bug as historical examples).
 - A requirement that every claim in the report carries a `file:line` reference.
 
 Cover these axes systematically before concluding:
@@ -64,7 +82,7 @@ Cover these axes systematically before concluding:
 5. **UX feedback** — many "bugs" are silent drops with no toast/error: the code works but the user sees nothing happen. Flag these explicitly.
 6. **Hosting / runtime assumptions** — **DO NOT assume Vercel, S3, Cloudflare, etc.** Bap is **not** on Vercel. Stay grounded in code-level facts. If you need to mention a body-limit / runtime limit, frame it as "the JSON-base64 body path will hit *any* host body limit", not "Vercel functions cap at 4.5 MB".
 
-## Step 3 — design the fix, honestly
+## Step 4 — design the fix, honestly
 
 For every diagnosis, produce:
 
@@ -75,42 +93,47 @@ For every diagnosis, produce:
 - **All reasonable alternatives** you considered, with the trade-off in one line each. Do not bury them in prose: list them.
 - **Implications**: what else gets touched (other surfaces using the same hook/constant/route), whether there is a migration, whether existing data is affected.
 
-## Step 4 — write the message to Baptiste
+## Step 5 — write the message to Baptiste
 
-**Style rules — strict.** These come from the user's explicit feedback:
+**Style rules, strict.** From the user's explicit feedback:
 
 - English, sober, professional, no childish tone.
 - **NO em-dashes (— / –) ever.** Use commas, colons, parentheses, or split sentences.
 - Factual only. No business implications, no "this will unblock users", no marketing.
 - No fluff intros ("here is", "I analysed", "in summary"). Get to the bug.
 - Every technical claim has a `file:line` reference, clickable for Baptiste.
-- Short. Aim for ~150-300 words total. If longer, you are padding.
+- **Short. Aim for 120-200 words total.** Cut hard. If longer, you are padding.
 - No prescriptive infra (no Vercel, no S3, no specific vendor) unless the repo itself uses it.
 - Be honest about uncertainty. If you are not sure, say "to confirm on the infra side" rather than invent.
 
-**Required structure** (use these exact section names, in this order):
+**Default structure (minimal)**:
 
 ```
 **Bug: <one-line restatement>**
 
-**User-facing symptom**: <what the user sees, 1-2 lines>
+**Symptom**: <what the user sees, 1 line>
 
-**Root cause**: <root cause grounded in file:line refs; what code does what wrong>
-
-**Compounding factor (if applicable)**: <secondary contributor, only if real and code-grounded>
+**Root cause**: <root cause grounded in file:line refs; 2-4 lines max>
 
 **Fix paths**
 
 1. **Quick fix**: <concrete, 5-15 min change, with files to touch>
 2. **Durable fix**: <property the fix should have, not a vendor prescription>
-3. **Alternatives considered** (optional, if relevant): <2-4 bullets, 1 line each, with why each was not retained>
-
-**Scope**: <which surfaces / files are affected; mention asymmetries explicitly>
 ```
 
-Sections can be omitted if genuinely empty (e.g. no compounding factor, no alternatives worth listing). Never fabricate a section to fill space.
+**Optional sections**, include ONLY if they add real signal:
 
-## Step 5 — dedup check (mandatory, before posting)
+- **Compounding factor**: a secondary, code-grounded contributor (e.g. base64 in JSON body amplifying a size cap). Skip if there is none.
+- **Alternatives considered**: 2-3 bullets, 1 line each, with the trade-off. Skip if the quick + durable already cover the design space.
+- **Regression commit**: `<hash> <subject>` when a `git log` surfaces a clear cause. One line.
+
+**Sections to skip by default**:
+
+- **Scope**: do not include. Surface asymmetries (e.g. "only in coworker view, not chat") can be mentioned in one sentence inside Root cause if needed. A dedicated Scope section is almost always padding.
+
+Never fabricate a section to fill space. Shorter is always better than complete.
+
+## Step 6 — dedup check (mandatory, before posting)
 
 Before sending anything, search Slack to make sure the same bug or feature has not already been reported. Posting a duplicate is worse than no message at all.
 
@@ -131,7 +154,7 @@ Run 2 to 3 short queries with different angles, not one long query. Slack search
 
 **Decide**:
 
-- **No match** → proceed to Step 6 (post).
+- **No match** → proceed to Step 7 (post).
 - **Likely match** (same file paths or same symptom, posted by anyone, not just the user) → **do not post**. Return to the user:
   1. A one-line note: `Already reported: <permalink to the existing Slack message> by <author> on <date>.`
   2. The draft message that would have been posted, so the user can decide to reply in-thread or force a repost.
@@ -140,7 +163,7 @@ Run 2 to 3 short queries with different angles, not one long query. Slack search
 
 Never silently skip the post without telling the user. Never post when a clear duplicate exists.
 
-## Step 6 — auto-post to Slack (mandatory, autonomous)
+## Step 7 — auto-post to Slack (mandatory, autonomous)
 
 The skill posts the message itself, autonomously, to the **The Agentic Company** Slack workspace. No draft, no confirmation step. The user explicitly asked for this.
 
@@ -161,7 +184,7 @@ If the trigger is genuinely ambiguous, default to `#bugs`. Do not ask the user.
 ```
 mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message(
   channel_id = "<bug or feature-request id>",
-  message = "<@U0A87JNV8QP> " + <message body from Step 4>
+  message = "<@U0A87JNV8QP> " + <message body from Step 5>
 )
 ```
 
@@ -169,16 +192,17 @@ Use `slack_send_message`, **never** `slack_send_message_draft` — the user want
 
 **Resolving IDs if they ever drift**: re-run `slack_search_users` for "Baptiste" and `slack_search_channels` for "bug" / "feature-request" inside the workspace **The Agentic Company**. The current logged-in account is the user's own. If multiple bug channels appear, prefer the canonical `#bugs` (general), not product-specific variants like `#bugs-hermes`.
 
-## Step 7 — return to the user
+## Step 8 — return to the user
 
 Return to the user, in this exact shape:
 
 1. The full message that was posted (so they can audit what went out).
-2. One line below it with the Slack permalink returned by `slack_send_message`, prefixed with `Posted: `.
+2. One line: `Posted: <Slack permalink returned by slack_send_message>`.
+3. If Chrome screenshots were captured in Step 2, one final block: `Screenshots: <list of file paths>` so the user can attach them to the Slack thread manually if relevant.
 
-Do not wrap with commentary, headers, or summaries. Two blocks, that is all.
+Do not wrap with commentary, headers, or summaries. The three blocks above, that is all.
 
-If during the investigation you find a second, related issue worth mentioning (e.g. same root cause hits another surface), include it in the same message under **Scope**. Do not open a second Slack message.
+If during the investigation you find a second, related issue worth mentioning (e.g. same root cause hits another surface), fold it into the Root cause sentence of the same message. Do not open a second Slack message.
 
 ## Historical bugs to avoid re-hallucinating
 
