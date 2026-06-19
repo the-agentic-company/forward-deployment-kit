@@ -2,17 +2,18 @@
 name: bap-bug-report
 description: |
   Deeply analyse a bug or feature request in the Bap repo
-  (the-agentic-company/bap) and produce a factual writeup ready to forward
-  to the CTO (Baptiste). Use when the user describes a bug or feature gap in
-  Bap / Heybap (chat, coworker output, attachments, MCP, skills UI, run
-  flow…) and wants a short, accurate, CTO-ready report with file:line
-  references and fix paths. Triggers: "Bug: …", "Feature: …", "explain this
-  to Baptiste", "write a short note to the CTO about …", "audit the bug …".
+  (the-agentic-company/bap), produce a factual writeup, and autonomously
+  post it to Slack in #bugs or #feature-request (workspace: The Agentic
+  Company) with @Baptiste pinged at the start. Use when the user describes
+  a bug or feature gap in Bap / Heybap (chat, coworker output, attachments,
+  MCP, skills UI, run flow…) and wants the report sent to the CTO without
+  manual copy-paste. Triggers: "Bug: …", "Feature: …", "explain this to
+  Baptiste", "send a short note to the CTO about …", "audit the bug …".
 ---
 
 # Bap bug / feature report to CTO
 
-Goal: the user gives a short one-line bug or feature description; you investigate the Bap codebase in depth; you return one synthetic message ready to forward to **Baptiste (CTO of the-agentic-company / Bap / Heybap)**.
+Goal: the user gives a short one-line bug or feature description; you investigate the Bap codebase in depth; you autonomously post one synthetic message to Slack (workspace **The Agentic Company**), pinging **Baptiste (CTO)** at the start, in `#bugs` or `#feature-request` depending on the nature of the input.
 
 ## Repo & context (always)
 
@@ -109,11 +110,45 @@ For every diagnosis, produce:
 
 Sections can be omitted if genuinely empty (e.g. no compounding factor, no alternatives worth listing). Never fabricate a section to fill space.
 
-## Step 5 — return the message
+## Step 5 — auto-post to Slack (mandatory, autonomous)
 
-Return **only** the message text, ready to copy-paste to Baptiste. Do not wrap it in commentary like "here is the message" or "hope this helps". The user will paste it as-is.
+The skill posts the message itself, autonomously, to the **The Agentic Company** Slack workspace. No draft, no confirmation step. The user explicitly asked for this.
 
-If during the investigation you find a second, related issue worth mentioning (e.g. same root cause hits another surface), include it in the same message under **Scope**. Do not open a second message.
+**Routing — pick the channel from the trigger**:
+
+- Bug (triggers: "Bug:", "audit the bug", "the bug is", anything describing broken behaviour) → `#bugs`, channel id `C0AA9RCTCHL`.
+- Feature request / gap (triggers: "Feature:", "feature request", "it would be great if", "missing feature", anything describing absent or desired capability) → `#feature-request`, channel id `C0A9ZD8AL3S`.
+
+If the trigger is genuinely ambiguous, default to `#bugs`. Do not ask the user.
+
+**Mention Baptiste at the very start of the message**:
+
+- Baptiste's Slack user id: `U0A87JNV8QP`.
+- Prepend `<@U0A87JNV8QP> ` (with a trailing space) to the message body. This renders as a real ping in Slack, not a plain `@Baptiste` string.
+
+**Send via the Slack MCP**:
+
+```
+mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message(
+  channel_id = "<bug or feature-request id>",
+  message = "<@U0A87JNV8QP> " + <message body from Step 4>
+)
+```
+
+Use `slack_send_message`, **never** `slack_send_message_draft` — the user wants autonomous posting.
+
+**Resolving IDs if they ever drift**: re-run `slack_search_users` for "Baptiste" and `slack_search_channels` for "bug" / "feature-request" inside the workspace **The Agentic Company**. The current logged-in account is the user's own. If multiple bug channels appear, prefer the canonical `#bugs` (general), not product-specific variants like `#bugs-hermes`.
+
+## Step 6 — return to the user
+
+Return to the user, in this exact shape:
+
+1. The full message that was posted (so they can audit what went out).
+2. One line below it with the Slack permalink returned by `slack_send_message`, prefixed with `Posted: `.
+
+Do not wrap with commentary, headers, or summaries. Two blocks, that is all.
+
+If during the investigation you find a second, related issue worth mentioning (e.g. same root cause hits another surface), include it in the same message under **Scope**. Do not open a second Slack message.
 
 ## Historical bugs to avoid re-hallucinating
 
