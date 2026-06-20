@@ -116,6 +116,58 @@ Validate before continuing:
 
 Sort `spec.agents` by `rank` ascending, drop anything below `minConfidence`, truncate at `maxAgents`.
 
+## Step 1.5. Prior art scout (mandatory, parallel)
+
+Before resolving tools or generating any asset, scan the operator's prior work for similar coworkers, MCPs, skill bundles, panel templates, and past builds. Reinventing patterns the operator already shipped is the failure mode this step prevents.
+
+```
+priorArt = invoke bap-prior-art-scout
+  capability: <synthesised from spec.agents[*].goal + outputs[*]>
+  context: { prospect: spec.callMeta.prospect, callType: spec.callMeta.callType }
+  signals: {
+    outputs:      flatten(spec.agents[*].outputs[*].kind),         // pdf-attachment, html-panel, email, notion-page, ...
+    inputs:       flatten(spec.agents[*].inputs[*].kind),          // audio-file, transcript, csv-upload, ...
+    integrations: flatten(spec.agents[*].neededTools[*].name),     // gmail, notion, salesforce, ...
+    verbs:        flatten(spec.agents[*].steps[*].verb)            // render, transcribe, summarize, publish, ...
+  }
+  options: { researchTimeCapMinutes: 8, maxResultsPerAngle: 5 }
+```
+
+Persist the returned payload at `${skillFolderRoot}/<callId>/prior-art.json`. The downstream steps (3 = generate skill folder; 5 = create coworker prompt) MUST read it and respect the recommendation:
+
+- If `priorArt.recommendation.primaryReuse.ref` points at a **workspace coworker** (`@username`), the new coworker's prompt is modelled on `mcp__bap__coworker_get(<ref>)`'s prompt (copy the structure, swap the domain).
+- If `primaryReuse.ref` points at a **vault project** (`~/Personal Agents/vault/projects/<x>/`), the generated `render.py` / `output_template.html` for any agent that needs the same output shape is **copied from that project** and adapted (data schema swap only; layout and dispatch logic preserved).
+- If `primaryReuse.ref` points at a **past build** (`~/HeyBap Pipeline/runs/<callId>/<slug>/`), same as above: copy then adapt.
+- If `noPriorArt: true`, generate from scratch but surface the absence in the final report ("First build of shape `<X>`. No prior anchor found.").
+
+The orchestrator must inject the prior-art context into every subagent / sub-skill it spawns from Step 3 onward, so the generation honours the reuse contract instead of inventing parallel patterns. Every generated artefact gets a one-line top-of-file comment: `# Modelled on <primaryReuse.ref>` or `# No prior art; new pattern for the workspace`.
+
+## Step 1.6. External platform feasibility check (mandatory, parallel)
+
+For every `neededTools[]` item that survived the prior-art scout as `custom_mcp_to_build` AND names a specific external platform (Leboncoin, Se Loger, LinkedIn, Indeed, Welcome to the Jungle, Vinted, Booking, PAP, Bien Ici, Pipedrive, ...) and is not on Bap's canonical native list, invoke [bap-platform-feasibility-check](../bap-platform-feasibility-check/SKILL.md) to verify the integration is actually achievable before committing to scaffold an MCP.
+
+The skill runs a 5-angle web research per platform (official API + tier, ToS posture, community MCPs / SDKs, browser-automation feasibility, known incidents + alternative routes) and returns a verdict per platform.
+
+```
+feasibility = invoke bap-platform-feasibility-check
+  platforms: [
+    { name: "<platform>", interactionShape: "<post|read|both>", region: "<FR|EU|WW>",
+      authNeeded: "<user-credentials|api-key|none>", frequency: "<one-shot|daily|hourly|realtime>",
+      context: "<one line from spec>" },
+    ...
+  ]
+  options: { researchTimeCapMinutesPerPlatform: 6 }
+```
+
+Persist the payload at `${skillFolderRoot}/<callId>/platform-feasibility.json`. Apply per verdict:
+
+- `feasible-via-api`: keep `kind: custom_mcp_to_build`; carry `apiTier` + `authScheme` to Step 2b. The custom MCP is a thin wrapper around the documented API.
+- `feasible-via-mcp`: downgrade `kind` to `existing_workspace_mcp`, set `mcpUrl` to the community MCP. Step 2's HUMAN STOP becomes "bind this URL in workspace settings" instead of "deploy a new MCP".
+- `feasible-via-browser`: tag the tool `kind: sandbox_browser_automation`. The orchestrator routes the action to Playwright running in the Bap sandbox (or a custom MCP that proxies a headless browser pool) instead of `build-mcp-for-bap`. Include the Angle 4 stealth notes (anti-bot stack, login flow) in the generated SKILL.md.
+- `legally-risky` or `infeasible`: tag the tool `kind: blocked` with `feasibilityVerdict` + `recommendedAlternative` from the payload. **Emit a HUMAN STOP before any scaffolding starts** (Step 2b refuses to build, Step 3 refuses to generate the agent until the operator decides: override, swap platform, or scope the agent without this tool).
+
+If `feasibility.humanStopRequired == true`, the orchestrator surfaces the stop with the verdicts and recommended alternatives, then waits for the operator's decision before proceeding to Step 2b.
+
 ## Step 2. Resolve tools per agent
 
 For each `agent` in the surviving list, build a `toolPlan`:
@@ -136,7 +188,7 @@ For each item in `agent.neededTools`:
 | `native_integration` | Append to `nativeIntegrations`. Verify the integration name matches the Bap canonical list (slack, gmail, notion, linear, airtable, outlook, google-calendar, google-drive, salesforce, hubspot). Otherwise downgrade to `sandboxCli` or `customMcp`. |
 | `existing_workspace_mcp` | Resolve the MCP server ID via `mcp__bap__coworker_list` of a known reference coworker, or ask human. Store id. |
 | `sandbox_cli` | No wiring; the agent prompt will reference the CLI per rule #16 of `build-agents-for-bap`. |
-| `custom_mcp_to_build` | Trigger [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md), see Step 2b. |
+| `custom_mcp_to_build` | **First check `priorArt.matches` for an existing MCP** (vault project with `mcp-handler` in `package.json`, or a workspace MCP already deployed). If found: downgrade to `existing_workspace_mcp` if the workspace MCP id is known, or re-deploy the vault project (no rebuild from scratch). Only trigger [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md) (Step 2b) when no prior MCP fits. |
 
 ### Step 2b. Build custom MCP when needed
 
@@ -178,6 +230,17 @@ ${agent.slug}/
 ├── render.py                 (only if rule #1 applies: large artefact)
 └── output_template.html      (only if /app/output.html is part of outputs)
 ```
+
+### Reuse-first generation (from `priorArt.recommendation`)
+
+Read `${skillFolderRoot}/<callId>/prior-art.json` (Step 1.5 output). Before writing any file in the skill folder, apply the reuse rules below:
+
+- **`render.py`**: if `priorArt` has a match whose source produces a comparable artefact (same output shape, similar data schema), the new `render.py` is **copied from that match** and adapted (data schema swap, label / branding swap, no structural change). Anchor at the top: `# Modelled on <ref>`. Do not regenerate the structural skeleton from scratch.
+- **`output_template.html`**: same rule. If a panel template in the operator's prior work renders the same shape (table with action buttons, KPI card grid, audit report layout), copy it and swap the data binding only. The HTML skeleton plus the `parent.postMessage({type: "bap:agentic-app-prompt", ...})` listener wiring stays verbatim from the source.
+- **`SKILL.md`**: if `priorArt.recommendation.primaryReuse.ref` is a workspace coworker, fetch its prompt (`mcp__bap__coworker_get(<ref>)`) and use it as the template for the new SKILL.md body's structure (role / mission / tool inventory / step-by-step / output contract / failure modes blocks). Swap the domain (prospect, integrations) but keep the section ordering and the validation-signal phrasings.
+- **`data_schema.json`**: if the prior artefact has a `data_schema.json`, diff it against the new agent's outputs and either extend (add fields) or restrict (remove fields). Never start a schema from scratch when an adjacent one exists.
+
+If `priorArt.recommendation.noPriorArt == true`, generate from scratch and add a header comment in the SKILL.md: `# First build of shape <X> in the workspace`. The final report's "Prior art" section flags this so the operator knows a new pattern was introduced.
 
 ### SKILL.md generation
 
@@ -443,6 +506,18 @@ Emit one Markdown report to the human via the handoff channel and to disk at `${
 
 ```
 # Build report - ${spec.callMeta.prospect} - ${spec.callMeta.callDateIso}
+
+## Prior art applied (${priorArt.matches.length})
+- **${match.source}** ${match.ref} (score ${match.score}) - ${match.reuseRecipe}
+- ...
+**Primary reuse**: ${priorArt.recommendation.primaryReuse.ref} - ${priorArt.recommendation.primaryReuse.reuseRecipe}
+${noPriorArt ? "**First build of this shape; no prior anchor reused.**" : ""}
+
+## External platform feasibility (${feasibility.platforms.length})
+- **${p.name}** -> ${p.verdict} (${p.recommendation.primary | truncate})
+  ${p.verdict in (legally-risky, infeasible) ? "Alternative: " + p.recommendation.backup : ""}
+- ...
+**Overall**: ${feasibility.overallVerdict}${feasibility.humanStopRequired ? " (HUMAN STOP required)" : ""}
 
 ## Live coworkers (${live.length})
 - **@${agent.slug}** - ${agent.description}

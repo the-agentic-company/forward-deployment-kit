@@ -540,6 +540,23 @@ No exceptions. Even when there is no `<form>` ancestor (and there usually isn't)
 2. Open the panel iframe in `chrome://inspect`, click Send, watch the network panel for the postMessage event. If it fires but no chat injection happens upstream, escalate to Baptiste with the timestamps.
 3. Check the panel's console for hydration errors (React #418 with `args[]=HTML` is a known symptom — usually downstream of the type=submit gotcha).
 
+## 24. Reuse before reinventing — scout prior art before writing any asset
+
+Lubin's prior coworkers and projects already solve most of the shapes a new build needs: PDF report by email (BATIMGIE), audio transcription (hyperstack-transcribe MCP), HTML panel with action buttons (almost every coworker), scheduled autonomous publishing (li-seo), live multi-tenant SSE (heybap-live-copilot). Building a new coworker that ships a "from-scratch" `render.py` / `output_template.html` / MCP when an existing one already does the same job is the single fastest way to introduce a regression on a pattern that was already battle-tested.
+
+Before generating any asset (SKILL.md, render.py, output_template.html, MCP), invoke [bap-prior-art-scout](../bap-prior-art-scout/SKILL.md) (the orchestrator's Step 1.5 does this automatically for transcript-driven builds). The scout returns ranked matches across 5 angles: workspace coworkers (`mcp__bap__coworker_list`), past local builds (`~/HeyBap Pipeline/runs/`), vault projects (`~/Personal Agents/vault/projects/`), FDK skills, personal skills.
+
+**Apply the result strictly:**
+
+- **`render.py`**: copy the closest prior `render.py` (same artefact shape) and swap the data binding. Anchor at the top of the file: `# Modelled on <ref>`. No structural rewrite.
+- **`output_template.html`**: same. Copy the closest prior panel that renders the same shape. Keep the `parent.postMessage({type: "bap:agentic-app-prompt", ...})` listener verbatim. Swap content, never layout, unless explicitly required.
+- **Custom MCP**: if a vault project already exposes the needed tools (search by purpose in `~/Personal Agents/vault/projects/*/`), redeploy that project's API rather than scaffolding a new MCP. Building a second MCP for the same external service is a maintenance trap.
+- **SKILL.md prompt**: if a workspace coworker already does an adjacent task, fetch its prompt (`mcp__bap__coworker_get(@<ref>)`) and use it as the template structure (role / mission / steps / output contract / failure modes). Swap the domain, keep the contract phrasings.
+
+**When the scout returns `noPriorArt: true`**, generate from scratch but explicitly note "first build of this shape in the workspace" at the top of the generated SKILL.md, so future scouts pick it up as a template.
+
+**Diagnostic, when a new coworker drifts from the patterns the workspace already uses**: the scout was skipped. Re-run the scout with the agent's `capability` and `signals`, then re-generate the artefacts against the recommended primary reuse before iterating further.
+
 ## Build / debug workflow
 
 1. **Design** — write the SKILL.md focused on what the agent *decides*; offload everything mechanical to bundled scripts.

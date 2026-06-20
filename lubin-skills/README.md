@@ -11,7 +11,10 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 | [`parse-transcript-to-agent-spec`](parse-transcript-to-agent-spec/SKILL.md) | Read a sales / discovery transcript and emit a strict JSON spec describing the coworker(s) the conversation implies (goal, steps, tools, success criteria, test payloads). |
 | [`bap-coworker-test-loop`](bap-coworker-test-loop/SKILL.md) | Run + observe + patch loop: `coworker_run` -> `coworker_logs` -> eval -> `coworker_update` until the coworker passes every success criterion. Supports sandbox-redirect and act-then-cleanup strategies per integration. |
 | [`transcript-to-bap-coworker`](transcript-to-bap-coworker/SKILL.md) | Meta-skill that chains the four above into one pipeline: transcript -> spec -> custom MCP(s) if needed -> skill bundle -> coworker -> tested. The "finish the call, walk out with the agents live" loop. |
-| [`bap-finding-router`](bap-finding-router/SKILL.md) | Single entry point for every HeyBap finding observed during the pipeline. Classifies SIMPLE vs COMPLEX, dispatches to `bap-bug-report` (PR on `the-agentic-company/bap` + Linear ticket in team `Bap` at status `In Review`) or `bap-feature-brainstorm` (Linear ticket at status `Triage` with label `Need More Shaping` carrying problem + 3 options + decision question). Linear's own integrations notify the team; no direct Slack post. |
+| [`bap-finding-router`](bap-finding-router/SKILL.md) | Single entry point for every HeyBap finding observed during the pipeline. Classifies SIMPLE vs COMPLEX, dispatches to `bap-bug-report` (PR on `the-agentic-company/bap` + Linear ticket in team `Bap` at status `In Review`, assignee Lubin) or `bap-feature-brainstorm` (Linear ticket at status `Triage` with label `Need More Shaping` carrying problem + 3 options + decision question, assignee Baptiste). Linear's own integrations notify the team; no direct Slack post. |
+| [`bap-capability-impact-analyzer`](bap-capability-impact-analyzer/SKILL.md) | When a finding is a *capability gap* (HeyBap can't do X today), produce a structured impact analysis: adjacent use cases the missing capability would unlock (with evidence from past transcripts and past coworker builds), effort estimate (t-shirt size + lines + surfaces), implementation sketch, go/no-go recommendation with rationale. Output feeds `bap-feature-brainstorm` (Impact section) or posts as a Linear comment when invoked standalone on an existing `BAP-<n>`. |
+| [`bap-prior-art-scout`](bap-prior-art-scout/SKILL.md) | Before generating a new coworker / skill / MCP / panel, scan the operator's prior work for similar artefacts. 5 parallel angles: workspace coworkers (`mcp__bap__coworker_list`), past local builds (`~/HeyBap Pipeline/runs/`), vault projects (`~/Personal Agents/vault/projects/`), FDK skills, personal skills. Returns ranked matches with `reuseRecipe` and a `primaryReuse` recommendation that downstream skills bake into generation (copy + swap data binding, never structural rewrite). Mirror of the impact analyzer but for the creation side. |
+| [`bap-platform-feasibility-check`](bap-platform-feasibility-check/SKILL.md) | For every external third-party platform the new coworker would interact with (Leboncoin, Se Loger, LinkedIn, Indeed, Welcome to the Jungle, Vinted, Booking, PAP, Bien Ici, Pipedrive, ...), run 5 parallel web-research angles (official API + tier, ToS posture, community MCPs / SDKs, browser-automation feasibility, known incidents) to verify the integration is actually achievable. Returns a verdict per platform (`feasible-via-api` / `feasible-via-mcp` / `feasible-via-browser` / `legally-risky` / `infeasible`) + recommended strategy + alternatives. Stops the pipeline from burning hours on an MCP whose target platform will block it on day one. |
 | [`bap-bug-report`](bap-bug-report/SKILL.md) | SIMPLE leaf. Clones the bap repo, reproduces the bug live (Chrome MCP for UI), creates a Linear ticket in team `Bap` to get an identifier (`BAP-<n>`), implements the quick fix on a branch named `fix/bap-<n>-slug`, opens a PR titled `BAP-<n> <Area>: …`, then transitions the Linear ticket to `In Review` and attaches the PR. Embeds a `FINDING_CONTEXT` JSON block in the Linear ticket description for downstream verification. |
 | [`bap-post-deploy-verify`](bap-post-deploy-verify/SKILL.md) | Closes the loop after a PR is merged + deployed. Three modes: A (re-run coworker, default), B (Chrome MCP visual repro), C (headless Playwright spec generated per finding and committed for permanent regression). Verdict on Pass: comments the Linear ticket and transitions it to `Live` (completed-type status). On Fail: opens a new Linear ticket via `bap-finding-router` labelled `Regression` and linked to the original via `relatedTo`. |
 
@@ -29,6 +32,21 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
               +-------+-------+----------------+
                       |
                       v
+              bap-prior-art-scout  (Step 1.5, parallel)
+              scans workspace coworkers + past builds + vault
+              projects + FDK + personal skills for reuse anchors
+                      |
+                      v
+              bap-platform-feasibility-check  (Step 1.6, parallel)
+              web research for each external platform :
+              API + tier, ToS, community MCPs, browser automation,
+              known incidents. HUMAN STOP on legally-risky / infeasible.
+                      |
+                      v
+              tools resolved, custom MCPs only when no prior fits
+              AND the external platform is feasible
+                      |
+                      v
               bap-coworker-test-loop
                       |
               every step may emit a finding
@@ -40,11 +58,17 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
               |                |
               v                v
        bap-bug-report   bap-feature-brainstorm
-       (Linear BAP-<n>  (Linear BAP-<n>
-        at In Review     at Triage with
-        + PR opened      Need More Shaping
-        + FINDING_CONTEXT label, 3 options
-        in ticket body)  in body)
+       (Linear BAP-<n>          ^
+        at In Review,           |  feature gap?  call first:
+        assignee Lubin,         +- bap-capability-impact-analyzer
+        + PR opened             |  (use cases unlocked, t-shirt
+        + FINDING_CONTEXT       |   size, implement|wait|defer|
+        in ticket body)         |   won't fix verdict)
+                                v
+                       Linear BAP-<n> at Triage,
+                       Need More Shaping label,
+                       Impact + 3 options in body,
+                       assignee Baptiste
               |
               v (after merge + deploy)
        bap-post-deploy-verify
@@ -99,6 +123,17 @@ scripts/build-from-transcript.sh - "Acme" < /tmp/transcript.txt
 ```
 
 The wrapper invokes `claude -p` from the FDK root, hands the transcript to `transcript-to-bap-coworker`, and the orchestrator runs the full chain autonomously. Logs land in `.run-logs/build-<timestamp>.log`.
+
+### Live dashboard (auto-launched)
+
+The wrapper auto-starts a local monitor on `http://localhost:7777` and opens it in the default browser. The dashboard shows, in real time:
+
+- **Pipeline runs** (per `callId`): prospect, current step state (parse / resolve-tools / mcps / skills-upload / coworkers / report), agent fleet with status badges (live / testing / planned / handoff), ambiguity counters.
+- **Generated outputs**: thumbnails of every `/app/output.html` template the pipeline emitted, embedded as sandboxed iframes (one card per coworker).
+- **Linear tickets** in team `Bap` with label `Dogfooding`, color-coded by state (Triage / In Review / Live / Regression). Requires `LINEAR_API_KEY` in env; without it the panel shows a disabled notice and the rest of the dashboard still works.
+- **Run logs**: a tail of the most recent `.run-logs/build-*.log` color-coded by level.
+
+Skip the dashboard with `FDK_SKIP_DASHBOARD=1`. Run it standalone with `scripts/dashboard.sh`; stop it with `kill $(cat .run-logs/monitor.pid)`. The monitor is Python 3 stdlib only (no pip install needed).
 
 What "autonomous after" means concretely:
 

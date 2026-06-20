@@ -40,14 +40,25 @@ MAX_AGENTS="${4:-3}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_TS="$(date +%Y%m%d-%H%M%S)"
-LOG_DIR="$REPO_ROOT/.run-logs"
-mkdir -p "$LOG_DIR"
+# State + logs roots. Override via env when running from an external workspace
+# (e.g. ~/HeyBap Pipeline/ sets these to its own runs/ and logs/).
+SKILL_FOLDER_ROOT="${FDK_BUILDS_ROOT:-/tmp/agent-builds}"
+LOG_DIR="${HEYBAP_LOGS_ROOT:-$REPO_ROOT/.run-logs}"
+mkdir -p "$LOG_DIR" "$SKILL_FOLDER_ROOT"
 LOG="$LOG_DIR/build-${RUN_TS}.log"
 
 command -v claude >/dev/null 2>&1 || {
   echo "claude CLI not found in PATH. Install Claude Code or fix \$PATH." >&2
   exit 2
 }
+
+# Auto-launch the live dashboard so the operator can watch pipeline state,
+# parallel agents, generated outputs and Linear tickets in real time.
+# Idempotent: skips if a monitor is already serving on port 7777.
+# Disable with FDK_SKIP_DASHBOARD=1.
+if [[ "${FDK_SKIP_DASHBOARD:-0}" != "1" ]] && [[ -x "$REPO_ROOT/scripts/dashboard.sh" ]]; then
+  "$REPO_ROOT/scripts/dashboard.sh" || true
+fi
 
 # Resolve the transcript input to a stable reference string for the prompt
 if [[ "$TRANSCRIPT_INPUT" == "-" ]]; then
@@ -82,7 +93,7 @@ You are running the FDK autonomous pipeline. The user manually triggered this wi
 Invoke the skill \`transcript-to-bap-coworker\` with:
   transcript: $TRANSCRIPT_REF
   context: $CONTEXT_JSON
-  options: { maxAgents: $MAX_AGENTS, testEnvPath: "$REPO_ROOT/test_env.yaml", skillFolderRoot: "/tmp/agent-builds", handoffChannel: "#agents-builds" }
+  options: { maxAgents: $MAX_AGENTS, testEnvPath: "$REPO_ROOT/test_env.yaml", skillFolderRoot: "$SKILL_FOLDER_ROOT", handoffChannel: "#agents-builds" }
 
 Run the full pipeline end-to-end without asking for confirmation:
 1. parse-transcript-to-agent-spec
@@ -102,7 +113,7 @@ Output at the end, in this exact shape:
 2. The list of @username coworkers that landed live.
 3. The list of agents that need a human stop (with the stop reason).
 4. The list of PRs opened on the-agentic-company/bap during this run.
-5. The list of Slack permalinks created during this run (brainstorm threads, #technical-pr notifications).
+5. The list of Linear tickets created during this run (one block per ticket: BAP-<n>, URL, state In Review for SIMPLE or Triage for COMPLEX, label set, assignee). For COMPLEX feature gaps, mention that the brainstorm ticket carries an Impact section produced by bap-capability-impact-analyzer (use cases unlocked, t-shirt size, verdict).
 EOF
 )
 
