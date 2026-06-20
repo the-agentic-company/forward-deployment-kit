@@ -40,8 +40,11 @@ MAX_AGENTS="${4:-3}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_TS="$(date +%Y%m%d-%H%M%S)"
-LOG_DIR="$REPO_ROOT/.run-logs"
-mkdir -p "$LOG_DIR"
+# State + logs roots. Override via env when running from an external workspace
+# (e.g. ~/HeyBap Pipeline/ sets these to its own runs/ and logs/).
+SKILL_FOLDER_ROOT="${FDK_BUILDS_ROOT:-/tmp/agent-builds}"
+LOG_DIR="${HEYBAP_LOGS_ROOT:-$REPO_ROOT/.run-logs}"
+mkdir -p "$LOG_DIR" "$SKILL_FOLDER_ROOT"
 LOG="$LOG_DIR/build-${RUN_TS}.log"
 
 command -v claude >/dev/null 2>&1 || {
@@ -90,7 +93,7 @@ You are running the FDK autonomous pipeline. The user manually triggered this wi
 Invoke the skill \`transcript-to-bap-coworker\` with:
   transcript: $TRANSCRIPT_REF
   context: $CONTEXT_JSON
-  options: { maxAgents: $MAX_AGENTS, testEnvPath: "$REPO_ROOT/test_env.yaml", skillFolderRoot: "/tmp/agent-builds", handoffChannel: "#agents-builds" }
+  options: { maxAgents: $MAX_AGENTS, testEnvPath: "$REPO_ROOT/test_env.yaml", skillFolderRoot: "$SKILL_FOLDER_ROOT", handoffChannel: "#agents-builds" }
 
 Run the full pipeline end-to-end without asking for confirmation:
 1. parse-transcript-to-agent-spec
