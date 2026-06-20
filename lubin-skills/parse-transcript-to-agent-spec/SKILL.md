@@ -274,6 +274,25 @@ Before emitting an agent, sanity-check that the workflow matches what Bap (Heyba
 
 Document the decomposition logic in `transcriptSummary` so the human inspector sees why N became M.
 
+## Prior-art enrichment (mandatory before emitting `neededTools[]`)
+
+Before classifying any tool as `custom_mcp_to_build`, invoke [bap-prior-art-scout](../bap-prior-art-scout/SKILL.md) with the partial spec to verify whether the operator has already shipped an MCP / a coworker / a skill that solves the same need. The scout looks at workspace coworkers (`mcp__bap__coworker_list`), past local builds (`~/HeyBap Pipeline/runs/`), vault projects (`~/Personal Agents/vault/projects/`), and FDK + personal skills.
+
+```
+priorArt = invoke bap-prior-art-scout
+  capability: <one-line summary of the agent goal + output shape>
+  signals: { outputs: [...], inputs: [...], integrations: [...], verbs: [...] }
+  options: { researchTimeCapMinutes: 5 }
+```
+
+Apply the result to each `neededTools[]` item:
+
+- If the scout returns a workspace MCP that covers the need: emit `kind: "existing_workspace_mcp"` with the `mcpServerId` (or with a `bindNote` pointing at the vault project to deploy if the workspace bind is missing).
+- If the scout returns an existing coworker that handles a comparable subtask: emit a `relatedCoworker: "@username"` field on the spec so the orchestrator's Step 3 (skill generation) models on it.
+- If no scout match exists for an MCP-shaped need: keep `kind: "custom_mcp_to_build"` but record `priorArtChecked: true` so the orchestrator's HUMAN STOP message includes "scout confirmed no prior MCP fits".
+
+Also emit a top-level `priorArt` field on the spec consolidating the scout's full payload (`matches`, `patternsObserved`, `recommendation`). The orchestrator reads this in its Step 1.5 and may skip a second scout invocation if the payload is recent enough (`researchTimeSeconds` within 5 min of the parse time).
+
 ## Invocation patterns
 
 ### Direct, from Claude Code

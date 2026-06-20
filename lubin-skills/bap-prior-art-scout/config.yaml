@@ -1,0 +1,27 @@
+sources:
+  workspace_coworkers:
+    enabled: true
+    list_limit: 100
+  past_builds:
+    enabled: true
+    root: "~/HeyBap Pipeline/runs"
+    lookback_days: 365
+  vault_projects:
+    enabled: true
+    root: "~/Personal Agents/vault/projects"
+  fdk_skills:
+    enabled: true
+    root: "~/Code/forward-deployment-kit/lubin-skills"
+  personal_skills:
+    enabled: true
+    root: "~/.claude/skills"
+research_time_cap_minutes: 8
+max_results_per_angle: 5
+scoring:
+  same_surface: 3
+  same_integration: 2
+  same_input_shape: 2
+  same_output_shape: 2
+  same_prospect: 1
+  recent: 1
+match_score_floor: 4
