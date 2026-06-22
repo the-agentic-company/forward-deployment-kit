@@ -228,7 +228,9 @@ Cadence 60 min is the operator's default; bump to 15 min after a HeyBap deploy i
 slack:
   workspace: "The Agentic Company"
   prod_channel_id: "REPLACE_WITH_AGENTS_PRODUCTION_CHANNEL_ID"  # resolved at runtime via slack_search_channels if placeholder
-  lubin_user_id: "REPLACE_WITH_LUBIN_SLACK_USER_ID"             # used only on 3rd-tick escalation
+  lubin_user_id: "U0AT7378GSX"                                  # used only on 3rd-tick escalation
+  baptiste_user_id: "U0A87JNV8QP"
+  louis_user_id: "U0A8M1B4962"
 bap:
   list_limit: 100
   runs_lookback_hours: 24

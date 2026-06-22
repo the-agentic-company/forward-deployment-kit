@@ -161,8 +161,9 @@ The thread itself is the trace. This skill does NOT create a Linear ticket no ma
 slack:
   workspace: "The Agentic Company"
   brainstorming_channel_id: "REPLACE_WITH_FEATURE_BRAINSTORMING_CHANNEL_ID"  # resolved at runtime via slack_search_channels if placeholder
-  baptiste_user_id: "REPLACE_WITH_BAPTISTE_SLACK_USER_ID"
-  lubin_user_id: "REPLACE_WITH_LUBIN_SLACK_USER_ID"
+  baptiste_user_id: "U0A87JNV8QP"
+  lubin_user_id: "U0AT7378GSX"
+  louis_user_id: "U0A8M1B4962"
 linear:
   team_key: "BAP"
   dedup_window_days: 90
