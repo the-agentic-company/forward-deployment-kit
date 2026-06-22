@@ -220,16 +220,16 @@ Resolve identifiers:
 Body template (Slack mrkdwn):
 
 ```
-:robot_face: *BAP-<n>* <ticket title> — implemented autonomously
+I fixed <user-visible problem in one short sentence — pull from the ticket's "Problem" / "Symptôme" section, restate in plain product language; do NOT paste the raw ticket sentence>.
 
-*Problem.* <one or two sentences restating the symptom in plain language — pull from the ticket's "Problem" / "Symptôme" section, do not paste raw>
+<one or two sentences describing the new behavior from the user's POV — what they will see now; no file names, no prop names, no diff size>.
 
-*Fix.* <one or two sentences naming the file(s) touched, the reuse anchor, and the diff size — e.g. "Reused `LoadingState`. +36 / -5 across 3 files.">
-
-PR <URL> · commit `<sha-short>` · <lines> lines · <files-touched> files
+PR: <PR URL> (commit `<sha-short>`, <lines> lines, <files-touched> files)
 Screenshots: <attachment.url #1> · <attachment.url #2>    ← only if the ticket already has image attachments OR Step 4's research pass captured a new repro; one URL per screenshot
 <@<reviewer-id>> ready for your review. Post-deploy verification will run after merge.
 ```
+
+Start with `I fixed ...` — declarative, no emoji prefix, no ticket identifier in the opener (the PR URL carries it). Do not include a separate `Linear:` link line.
 
 Send via `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message` (channel_id from config).
 

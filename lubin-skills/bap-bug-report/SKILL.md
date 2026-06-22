@@ -373,13 +373,11 @@ Resolve identifiers:
 Body template (Slack mrkdwn):
 
 ```
-:hammer_and_wrench: *BAP-<n>* <ticket title>
+I fixed <user-visible problem in one short sentence — what was observed in the product, not what's in the code; understandable to a non-technical reader>.
 
-*Problem.* <one or two sentences restating the symptom in plain language — what the user observed, no jargon>
+<one or two sentences describing the new behavior from the user's POV — what they will see now; compare to the broken state only if it sharpens the contrast; no file names, no prop names, no diff size>.
 
-*Fix.* <one or two sentences naming the file(s) touched, the reuse anchor (or "new abstraction" if unavoidable), and the diff size — e.g. "Added `runStatus` prop to `EmptyPreview`, reuses existing `LoadingState`. +36 / -5 across 3 files.">
-
-PR <URL> · commit `<sha-short>` · <lines> lines · <files-touched> files
+PR: <PR URL> (commit `<sha-short>`, <lines> lines, <files-touched> files)
 Screenshots: <attachment.url #1> · <attachment.url #2>    ← only if evidence.screenshotAttachments is non-empty; one URL per screenshot; Slack auto-unfurls Linear asset URLs
 <@<reviewer-id>> ready for your review.
 ```
@@ -390,7 +388,10 @@ Constraints:
 
 - Exactly one message per PR. Do not re-post on PR updates; reply in the same thread instead.
 - The reviewer ping (`<@U…>`) is required — it is the whole point of the message; remove it and the notification is silent.
-- Problem and Fix are user-facing summaries, not raw ticket / commit text. Avoid em-dashes (the team's house style).
+- Start with `I fixed ...` — declarative, no emoji prefix, no ticket identifier. The ticket identifier is in the PR URL and the linked attachment; leading with it adds noise for non-tech readers.
+- Do not include a `Linear:` link line. The PR is the actionable surface; the Linear ticket is auto-linked from the PR description.
+- Both sentences (the problem statement and the new-behavior description) must read as plain product language. No file paths, no React prop names, no diff-style refs. A non-technical reader on the channel should understand what shipped without opening anything.
+- Avoid em-dashes (the team's house style).
 - The `Screenshots:` line is required whenever `evidence.screenshotAttachments` is non-empty. Drop the entire line when no screenshot was captured — do not write "Screenshots: none".
 - Capture the `permalink` returned by `slack_send_message` and include it in the Step 11 return value as `slackPermalink`.
 
