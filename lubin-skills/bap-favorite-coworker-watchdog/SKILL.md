@@ -14,7 +14,7 @@ description: |
   Platform-level issues (Bap API errors, sandbox timeouts) get routed
   through `feature-bug-complexity-classification` so they become Linear
   tickets and fixed via the rest of the pipeline. Designed as a
-  scheduled `/loop` (every 1h or 4h) on the operator's laptop or on a
+  scheduled `/loop` (every 1h) on the operator's laptop or on a
   Bap meta-coworker.
 ---
 
@@ -29,9 +29,8 @@ The point is not to be exhaustive on every run; the point is to catch the silent
 
 ## When to invoke
 
-- Scheduled `/loop 1h` or `/loop 4h` on the operator's machine.
+- Scheduled `/loop 1h` on the operator's machine.
 - Direct invocation with `coworkerRef: "@username"` to spot-check one specific favorite.
-- After a HeyBap deploy that touches coworker runtime (catch breakage early).
 
 Do not invoke for:
 
@@ -208,7 +207,7 @@ Append to `~/HeyBap Pipeline/logs/watchdog.jsonl` for audit and dashboard visibi
   if anomalies > 0, the dashboard's footer surfaces a red dot
 ```
 
-Cadence 60 min is the operator's default; bump to 15 min after a HeyBap deploy if catching early breakage matters; relax to 4 h during quiet periods. The skill is rate-limited internally to 8 concurrent `coworker_runs` calls so a fleet of 40 favorites stays under the Bap rate limit.
+Cadence is a fixed 60 min. The skill is rate-limited internally to 8 concurrent `coworker_runs` calls so a fleet of 40 favorites stays under the Bap rate limit.
 
 ## Anti-patterns
 
