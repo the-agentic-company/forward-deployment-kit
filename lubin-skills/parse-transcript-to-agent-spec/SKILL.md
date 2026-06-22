@@ -1,43 +1,64 @@
 ---
 name: parse-transcript-to-agent-spec
 description: |
-  Read a sales / discovery / kickoff call transcript and emit a strict JSON spec
-  describing the Bap (Heybap) coworker(s) implied by the conversation: goal,
-  triggers, inputs, steps, outputs, needed tools, success criteria, test
-  payloads, and human-in-the-loop checkpoints. The downstream skills
-  `transcript-to-bap-coworker` and `bap-coworker-test-loop` consume this JSON
-  to build, deploy and validate the coworker on Bap. Use when a transcript
-  (Grain export, raw text, audio that has already been transcribed) needs to
+  Read EITHER a sales / discovery / kickoff call transcript OR a free-form
+  operator brief written in the first person ("je veux un coworker qui
+  fait X quand Y"), and emit a strict JSON spec describing the Bap
+  (Heybap) coworker(s) implied: goal, triggers, inputs, steps, outputs,
+  needed tools, success criteria, test payloads, and human-in-the-loop
+  checkpoints. The skill auto-detects the input shape (transcript vs
+  brief) and switches extraction strategy accordingly. The downstream
+  skills `transcript-to-bap-coworker` and `bap-coworker-test-loop`
+  consume this JSON to build, deploy and validate the coworker on Bap.
+  Use when a transcript (Grain export, raw text, audio that has already
+  been transcribed) OR a brief (note in inbox/, paste in chat) needs to
   be turned into one or several deployable agents.
 ---
 
-# Parse a call transcript into a Bap agent spec
+# Parse a call transcript or an operator brief into a Bap agent spec
 
-Half the work of shipping a coworker is reading a 45-minute call carefully enough to extract what it should actually do. This skill turns that reading pass into a deterministic JSON document that every downstream automation can rely on. No prose, no "I think", just a schema.
+Half the work of shipping a coworker is reading a 45-minute call carefully enough to extract what it should actually do. The other half is making the same kind of extraction work when the operator simply writes "monte-moi un coworker qui fait X". This skill turns either reading pass into a deterministic JSON document that every downstream automation can rely on. No prose, no "I think", just a schema.
 
 The output is the contract for [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md) and [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md). Get this wrong and the rest of the pipeline silently produces a useless agent.
 
 ## When to invoke
 
-Trigger keywords / patterns:
+Trigger keywords / patterns (both shapes):
 
-- "voici le transcript de mon call avec X, qu'est-ce qu'on en sort"
-- "regarde ce que veut le prospect, monte le coworker"
-- "parse le transcript Grain de [...] et propose les agents"
-- A Grain URL (`https://grain.com/share/.../...`) or a `.txt` / `.md` attachment that looks like a multi-speaker transcript
-- A meeting note dropped with "agentifie ça"
+- **Transcript shape**: "voici le transcript de mon call avec X, qu'est-ce qu'on en sort", "regarde ce que veut le prospect, monte le coworker", "parse le transcript Grain de [...] et propose les agents". Or a Grain URL (`https://grain.com/share/.../...`). Or a `.txt` / `.md` attachment that looks like multi-speaker dialogue.
+- **Brief shape**: "monte-moi un coworker qui fait X quand Y", "j'ai besoin d'un agent pour [tâche]", "voici la spec d'un agent : ...". Or a `.txt` / `.md` drop in inbox/ written in the first person without speaker labels.
+- A meeting note dropped with "agentifie ça" (could be either shape; auto-detect resolves).
 
-If the user gives you a transcript without instructions, default to invoking this skill before doing anything else. The JSON output is cheap and makes every later decision concrete.
+If the user gives you any of the above without instructions, default to invoking this skill before doing anything else. The JSON output is cheap and makes every later decision concrete.
+
+## Input shape auto-detection (`inputMode`)
+
+The skill auto-detects whether the input is a `transcript` or a `brief`. Heuristics:
+
+| Signal | Score |
+|---|---|
+| Speaker labels (`Speaker 1:`, `Lubin:`, `Baptiste:`, name followed by colon at line start) | transcript +3 |
+| Timestamps (`[00:12:34]`, `12:34 - `) | transcript +3 |
+| Grain URL anywhere in input | transcript +5 |
+| First-person operator voice (`je veux`, `il faut un coworker`, `monte-moi`, `j'ai besoin`) | brief +3 |
+| Imperative bullets (`- déclenchement: ...`, `- output: ...`) | brief +2 |
+| Length under 500 chars | brief +1 |
+| Multi-speaker dialogue patterns (alternating short turns) | transcript +2 |
+
+Pick the higher score. Ties default to `transcript` (conservative; the transcript pass handles the strict dialogue extraction; if the input is actually a brief, the parser still works but emits an `inputModeHint: "auto-detected-transcript-but-could-be-brief"` so the operator can override).
+
+Override with explicit `inputMode: "transcript" | "brief"` in the input contract. Use `inputMode: "auto"` (default) to trigger the heuristic.
 
 ## Input contract
 
 ```json
 {
-  "transcript": "<raw text or Grain export, speaker labels OK>",
+  "input": "<raw text: transcript with speaker labels OR brief in operator voice>",
+  "inputMode": "auto | transcript | brief",
   "context": {
     "prospect": "Concentrix",
     "icp": "BPO 200k+ agents, sales ops",
-    "callType": "discovery | kickoff | follow-up | technical | demo",
+    "callType": "discovery | kickoff | follow-up | technical | demo | brief",
     "ownerInternal": "Lubin",
     "callDateIso": "2026-06-18",
     "priorAgents": []
@@ -49,7 +70,22 @@ If the user gives you a transcript without instructions, default to invoking thi
 }
 ```
 
-`context` is optional but raises quality. If absent, infer from the transcript itself: prospect name from speaker references, callType from intent markers ("on commence", "vous avez vu la démo", "après les retours de la dernière fois").
+The legacy field name `transcript` is still accepted for backward compatibility (treated as alias for `input`).
+
+`context` is optional but raises quality. If absent, infer from the input itself: prospect name from speaker references or the brief's mention of a client, callType from intent markers ("on commence", "vous avez vu la démo", "après les retours de la dernière fois") or set to `"brief"` when `inputMode == "brief"`.
+
+### Brief-shape extraction (when `inputMode == "brief"`)
+
+When the input is an operator brief, the extraction is more direct: the operator wrote what they want, so there is less guesswork than a transcript pass. Specifically:
+
+- Treat the brief as the operator's authoritative description. No need to weigh competing voices.
+- Skip the speaker-deduplication step and the "what is the prospect actually asking" interpretation.
+- Confidence per agent is typically high (>= 0.8) because the operator wrote the spec themselves; only emit ambiguities for items the brief is genuinely silent on (no auth source, no schedule, no clear output format).
+- `callMeta.callDateIso` defaults to today; `callMeta.prospect` defaults to the operator's own client list or stays null if the brief is internal-only.
+- `triggers[].type` defaults to `"manual"` unless the brief explicitly mentions a schedule, webhook, or external event.
+- `evidence[*].quote` cites the brief's own sentences (no speaker attribution; mark `speaker: "operator"`).
+
+Keep the same output schema; only the extraction strategy differs. Downstream skills do not need to know whether the spec came from a transcript or a brief.
 
 `maxAgents` caps the number of agents proposed. The transcript almost always contains 2 to 6 candidate processes; ranking them prevents diluting the loop.
 
@@ -376,7 +412,7 @@ If `goal` or `steps[]` can't be derived at all, do not emit the agent. Push it t
 
 ## Report HeyBap bugs and feature gaps
 
-This skill reads transcripts in a way that surfaces what the platform *cannot* do today. Every time you encounter a HeyBap capability gap or a misbehaviour, invoke [bap-finding-router](../bap-finding-router/SKILL.md). The router classifies the finding (SIMPLE vs COMPLEX) and dispatches to the right leaf: `bap-bug-report` for SIMPLE (opens a PR on `the-agentic-company/bap` and creates a Linear ticket in team `Bap` at status `In Review` linked to the PR) or `bap-feature-brainstorm` for COMPLEX (creates a Linear ticket in team `Bap` at status `Triage` with label `Need More Shaping` containing the 3-options problem statement). Linear's own integrations notify the team; no direct Slack post. One finding equals one invocation. Do not invoke `bap-bug-report` or `bap-feature-brainstorm` directly from this skill; the router is the only entry point.
+This skill reads transcripts in a way that surfaces what the platform *cannot* do today. Every time you encounter a HeyBap capability gap or a misbehaviour, invoke [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md). The router classifies the finding (SIMPLE vs COMPLEX) and dispatches to the right leaf: `bap-bug-report` for SIMPLE (opens a PR on `the-agentic-company/bap` and creates a Linear ticket in team `Bap` at status `In Review` linked to the PR) or `bap-feature-brainstorm` for COMPLEX (creates a Linear ticket in team `Bap` at status `Triage` with label `Need More Shaping` containing the 3-options problem statement). Linear's own integrations notify the team; no direct Slack post. One finding equals one invocation. Do not invoke `bap-bug-report` or `bap-feature-brainstorm` directly from this skill; the router is the only entry point.
 
 Specific triggers from this skill:
 
@@ -386,7 +422,7 @@ Specific triggers from this skill:
 - The parser would benefit from a HeyBap-side schema for the agent spec (store the JSON on the coworker as metadata, version it, regenerate from transcript) so the orchestrator does not maintain its own `${skillFolderRoot}/<callId>/agent-spec.json`. Feature request.
 - Any time the transcript references a HeyBap action you remember being broken (skill upload race, `awaiting_user_input` regression, panel not refreshing, etc.). Bug.
 
-Do not silently downgrade into `ambiguities[]` or `discardedCandidates[]` when the real story is "the platform should let me do this". The two arrays are for legitimate scope decisions; platform gaps go through `bap-finding-router`.
+Do not silently downgrade into `ambiguities[]` or `discardedCandidates[]` when the real story is "the platform should let me do this". The two arrays are for legitimate scope decisions; platform gaps go through `feature-bug-complexity-classification`.
 
 ## See also
 
@@ -394,4 +430,4 @@ Do not silently downgrade into `ambiguities[]` or `discardedCandidates[]` when t
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): the test harness that reads `successCriteria` and `testPayloads` to validate the coworker post-deploy.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): rules the generated coworker must follow at build time. Rules #6, #8, #12, #19 are referenced directly in the schema above.
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): triggered when `neededTools[].kind == "custom_mcp_to_build"`.
-- [bap-finding-router](../bap-finding-router/SKILL.md): single entry point for every HeyBap finding observed during parsing (see the section above).
+- [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md): single entry point for every HeyBap finding observed during parsing (see the section above).

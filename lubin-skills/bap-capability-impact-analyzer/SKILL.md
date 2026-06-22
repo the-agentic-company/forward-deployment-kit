@@ -317,7 +317,7 @@ corpus:
 
 ## See also
 
-- [bap-finding-router](../bap-finding-router/SKILL.md): triggers this skill via the brainstorm path for COMPLEX feature gaps.
+- [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md): triggers this skill via the brainstorm path for COMPLEX feature gaps.
 - [bap-feature-brainstorm](../../.claude/skills/bap-feature-brainstorm/SKILL.md): the primary consumer. Adds the analyzer's payload as an "Impact si implémenté" section in the Linear ticket it creates.
 - [parse-transcript-to-agent-spec](../parse-transcript-to-agent-spec/SKILL.md): emits the `ambiguities[]` / `notBuilt[]` items this skill scans across past builds.
 - Grain corpus access: operator memory `grain-corpus-access` — ~620 transcripts via Grain public API (PAT Bearer).

@@ -1,5 +1,5 @@
 ---
-name: bap-finding-router
+name: feature-bug-complexity-classification
 description: |
   Single entry point for every HeyBap finding observed during forward
   deployment: bug, missing feature, friction, surprise. Classifies the
@@ -15,7 +15,7 @@ description: |
   `transcript-to-bap-coworker`, or a human observes a HeyBap gap.
 ---
 
-# Finding router for HeyBap
+# Feature and bug complexity classification gate for HeyBap
 
 The pipeline skills (`parse-transcript-to-agent-spec`, `bap-coworker-test-loop`, `transcript-to-bap-coworker`) sit at the front line of HeyBap usage. They are designed to surface every platform gap or misbehaviour as a structured *finding*. This skill is the single gate every finding goes through. It classifies, decides where the finding lands, and invokes the right downstream skill autonomously.
 
@@ -148,7 +148,7 @@ The router returns a structured result to the calling skill:
 ### From a pipeline skill (the default)
 
 ```
-invoke bap-finding-router
+invoke feature-bug-complexity-classification
   kind: "bug"
   title: "skill_add returned 200 but coworker can't see the skill for 6s"
   oneLineDescription: "After mcp__bap__skill_add succeeds, a chat_run query for available skills returns empty for several seconds before the skill becomes visible."
@@ -177,11 +177,11 @@ The router is the entry point for *findings*, not for transcripts. A scheduled m
 ```
 /loop 60m drain the findings queue
   for each unprocessed entry in ${findingsQueue}:
-    invoke bap-finding-router with the entry
+    invoke feature-bug-complexity-classification with the entry
     mark processed regardless of verdict (already-reported / dispatched / config-missing / low-confidence)
 ```
 
-`${findingsQueue}` is a local file (`~/.claude/skills/bap-finding-router/queue.jsonl`) that upstream skills append to instead of invoking the router synchronously. This is the right pattern for high-volume pipelines where 5 runners observe the same bug: they append to the queue, the router drains at its own cadence, dedup catches duplicates once.
+`${findingsQueue}` is a local file (`~/.claude/skills/feature-bug-complexity-classification/queue.jsonl`) that upstream skills append to instead of invoking the router synchronously. This is the right pattern for high-volume pipelines where 5 runners observe the same bug: they append to the queue, the router drains at its own cadence, dedup catches duplicates once.
 
 The queue file becomes the in-flight dedup registry mentioned in the roadmap (axis #6 of the lubin-skills-map). One file replaces both.
 
@@ -198,7 +198,7 @@ The queue file becomes the in-flight dedup registry mentioned in the roadmap (ax
 
 ## Config and ids
 
-The router reads `config.yaml` next to its SKILL.md (`lubin-skills/bap-finding-router/config.yaml` in the FDK clone) for:
+The router reads `config.yaml` next to its SKILL.md (`lubin-skills/feature-bug-complexity-classification/config.yaml` in the FDK clone) for:
 
 ```yaml
 linear:

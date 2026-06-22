@@ -11,12 +11,12 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 | [`parse-transcript-to-agent-spec`](parse-transcript-to-agent-spec/SKILL.md) | Read a sales / discovery transcript and emit a strict JSON spec describing the coworker(s) the conversation implies (goal, steps, tools, success criteria, test payloads). |
 | [`bap-coworker-test-loop`](bap-coworker-test-loop/SKILL.md) | Run + observe + patch loop: `coworker_run` -> `coworker_logs` -> eval -> `coworker_update` until the coworker passes every success criterion. Supports sandbox-redirect and act-then-cleanup strategies per integration. |
 | [`transcript-to-bap-coworker`](transcript-to-bap-coworker/SKILL.md) | Meta-skill that chains the four above into one pipeline: transcript -> spec -> custom MCP(s) if needed -> skill bundle -> coworker -> tested. The "finish the call, walk out with the agents live" loop. |
-| [`bap-finding-router`](bap-finding-router/SKILL.md) | Single entry point for every HeyBap finding observed during the pipeline. Classifies SIMPLE vs COMPLEX, dispatches to `bap-bug-report` (PR on `the-agentic-company/bap` + Linear ticket in team `Bap` at status `In Review`, assignee Lubin) or `bap-feature-brainstorm` (Linear ticket at status `Triage` with label `Need More Shaping` carrying problem + 3 options + decision question, assignee Baptiste). Linear's own integrations notify the team; no direct Slack post. |
+| [`feature-bug-complexity-classification`](feature-bug-complexity-classification/SKILL.md) | Single entry point for every HeyBap finding observed during the pipeline. Classifies SIMPLE vs COMPLEX, dispatches to `bap-bug-report` (PR on `the-agentic-company/bap` + Linear ticket in team `Bap` at status `In Review`, assignee Lubin) or `bap-feature-brainstorm` (Linear ticket at status `Triage` with label `Need More Shaping` carrying problem + 3 options + decision question, assignee Baptiste). Linear's own integrations notify the team; no direct Slack post. |
 | [`bap-capability-impact-analyzer`](bap-capability-impact-analyzer/SKILL.md) | When a finding is a *capability gap* (HeyBap can't do X today), produce a structured impact analysis: adjacent use cases the missing capability would unlock (with evidence from past transcripts and past coworker builds), effort estimate (t-shirt size + lines + surfaces), implementation sketch, go/no-go recommendation with rationale. Output feeds `bap-feature-brainstorm` (Impact section) or posts as a Linear comment when invoked standalone on an existing `BAP-<n>`. |
 | [`bap-prior-art-scout`](bap-prior-art-scout/SKILL.md) | Before generating a new coworker / skill / MCP / panel, scan the operator's prior work for similar artefacts. 5 parallel angles: workspace coworkers (`mcp__bap__coworker_list`), past local builds (`~/HeyBap Pipeline/runs/`), vault projects (`~/Personal Agents/vault/projects/`), FDK skills, personal skills. Returns ranked matches with `reuseRecipe` and a `primaryReuse` recommendation that downstream skills bake into generation (copy + swap data binding, never structural rewrite). Mirror of the impact analyzer but for the creation side. |
 | [`bap-platform-feasibility-check`](bap-platform-feasibility-check/SKILL.md) | For every external third-party platform the new coworker would interact with (Leboncoin, Se Loger, LinkedIn, Indeed, Welcome to the Jungle, Vinted, Booking, PAP, Bien Ici, Pipedrive, ...), run 5 parallel web-research angles (official API + tier, ToS posture, community MCPs / SDKs, browser-automation feasibility, known incidents) to verify the integration is actually achievable. Returns a verdict per platform (`feasible-via-api` / `feasible-via-mcp` / `feasible-via-browser` / `legally-risky` / `infeasible`) + recommended strategy + alternatives. Stops the pipeline from burning hours on an MCP whose target platform will block it on day one. |
 | [`bap-bug-report`](bap-bug-report/SKILL.md) | SIMPLE leaf. Clones the bap repo, reproduces the bug live (Chrome MCP for UI), creates a Linear ticket in team `Bap` to get an identifier (`BAP-<n>`), implements the quick fix on a branch named `fix/bap-<n>-slug`, opens a PR titled `BAP-<n> <Area>: …`, then transitions the Linear ticket to `In Review` and attaches the PR. Embeds a `FINDING_CONTEXT` JSON block in the Linear ticket description for downstream verification. |
-| [`bap-post-deploy-verify`](bap-post-deploy-verify/SKILL.md) | Closes the loop after a PR is merged + deployed. Three modes: A (re-run coworker, default), B (Chrome MCP visual repro), C (headless Playwright spec generated per finding and committed for permanent regression). Verdict on Pass: comments the Linear ticket and transitions it to `Live` (completed-type status). On Fail: opens a new Linear ticket via `bap-finding-router` labelled `Regression` and linked to the original via `relatedTo`. |
+| [`bap-post-deploy-verify`](bap-post-deploy-verify/SKILL.md) | Closes the loop after a PR is merged + deployed. Three modes: A (re-run coworker, default), B (Chrome MCP visual repro), C (headless Playwright spec generated per finding and committed for permanent regression). Verdict on Pass: comments the Linear ticket and transitions it to `Live` (completed-type status). On Fail: opens a new Linear ticket via `feature-bug-complexity-classification` labelled `Regression` and linked to the original via `relatedTo`. |
 
 ## How they relate
 
@@ -52,7 +52,7 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
               every step may emit a finding
                       |
                       v
-              bap-finding-router  (classify, dispatch)
+              feature-bug-complexity-classification  (classify, dispatch)
                       |
               +-------+--------+
               |                |
@@ -80,15 +80,15 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
         v            v
     verified     regression
     (transition  (new finding ->
-     ticket to    bap-finding-router,
+     ticket to    feature-bug-complexity-classification,
      Live)        Regression label,
                   relatedTo original)
 ```
 
 - **Tool-layer** skills: `build-mcp-for-bap` (HTTP MCP), `build-agents-for-bap` (coworker rules).
-- **Pipeline** skills: `parse-transcript-to-agent-spec` (input -> structured spec), `bap-coworker-test-loop` (deployed -> validated), `transcript-to-bap-coworker` (chains everything), `bap-finding-router` (HeyBap-side feedback).
+- **Pipeline** skills: `parse-transcript-to-agent-spec` (input -> structured spec), `bap-coworker-test-loop` (deployed -> validated), `transcript-to-bap-coworker` (chains everything), `feature-bug-complexity-classification` (HeyBap-side feedback).
 
-The two tool-layer skills cover the full development loop on their own; the pipeline skills automate the path from a raw call transcript to a tested live coworker, and the finding router closes the feedback loop on the HeyBap platform itself.
+The two tool-layer skills cover the full development loop on their own; the pipeline skills automate the path from a raw call transcript or operator brief to a tested live coworker, and the complexity-classification gate closes the feedback loop on the HeyBap platform itself.
 
 ## How to use these in your own setup
 
@@ -122,7 +122,14 @@ Or piping inline text:
 scripts/build-from-transcript.sh - "Acme" < /tmp/transcript.txt
 ```
 
-The wrapper invokes `claude -p` from the FDK root, hands the transcript to `transcript-to-bap-coworker`, and the orchestrator runs the full chain autonomously. Logs land in `.run-logs/build-<timestamp>.log`.
+Or a free-form **operator brief** (first-person spec, no need for a real call):
+
+```bash
+echo "Je veux un coworker qui parse mes leads CSV chaque matin et écrit le récap dans Notion" \
+  | FDK_INPUT_MODE=brief scripts/build-from-transcript.sh - "" brief
+```
+
+The wrapper invokes `claude -p` from the FDK root, hands the input to `transcript-to-bap-coworker`, and the orchestrator runs the full chain autonomously. The parser auto-detects whether the input is a transcript (multi-speaker dialogue, Grain URL) or a brief (first-person operator voice without speaker labels). Force the mode with `FDK_INPUT_MODE=transcript|brief|auto` (default auto). Logs land in `.run-logs/build-<timestamp>.log`.
 
 ### Live dashboard (auto-launched)
 
@@ -139,7 +146,7 @@ What "autonomous after" means concretely:
 
 - No permission prompt for any of the tools needed (`mcp__bap__*`, `mcp__Claude_in_Chrome__*`, Slack MCP, Notion MCP, Linear MCP, `gh`, `git`, `npx playwright`, `vercel`, `curl`, `jq`, etc.). The `.claude/settings.json` allowlist is shared with the team, `.claude/settings.local.json` is gitignored for personal overrides.
 - HUMAN STOPs (workspace MCP bind, panel E2E click) are *documented* in the final report instead of blocking the run. `stopOnFirstHumanCheckpoint` is false in this mode.
-- HeyBap findings observed during the run route through `bap-finding-router` automatically.
+- HeyBap findings observed during the run route through `feature-bug-complexity-classification` automatically.
 
 ### Direct invocation (without the wrapper)
 
@@ -165,7 +172,7 @@ The orchestrator emits a Markdown report at the end listing live coworkers, item
 
 ## Reporting HeyBap bugs and feature gaps
 
-Each pipeline skill (`parse-transcript-to-agent-spec`, `bap-coworker-test-loop`, `transcript-to-bap-coworker`) has a dedicated "Report HeyBap bugs and feature gaps" section that mandates invoking [`bap-finding-router`](bap-finding-router/SKILL.md) whenever a platform misbehaviour, missing API, or feature gap is observed. The router is the only entry point; the pipeline skills do not call the leaves directly.
+Each pipeline skill (`parse-transcript-to-agent-spec`, `bap-coworker-test-loop`, `transcript-to-bap-coworker`) has a dedicated "Report HeyBap bugs and feature gaps" section that mandates invoking [`feature-bug-complexity-classification`](feature-bug-complexity-classification/SKILL.md) whenever a platform misbehaviour, missing API, or feature gap is observed. The router is the only entry point; the pipeline skills do not call the leaves directly.
 
 Routing:
 
@@ -184,14 +191,14 @@ Once a PR opened by `bap-bug-report` is merged and deployed, [`bap-post-deploy-v
 - **Mode B**: drives heybap.com with the Claude-in-Chrome MCP, reproduces the finding scenario, captures before/after screenshots. Used when the finding lives in the UI.
 - **Mode C**: generates and runs a headless Playwright spec under [`bap-post-deploy-verify/playwright-tests/`](bap-post-deploy-verify/playwright-tests/). One spec per finding, committed for permanent CI regression. Reuses the QA visual pattern from the operator's `li-seo` project.
 
-On `verified`, the verifier comments the PR, labels it `post-deploy-verified`, and marks the finding closed. On `regression`, it opens a new finding (`regression after merge of #PR`) back through `bap-finding-router`. The loop is closed.
+On `verified`, the verifier comments the PR, labels it `post-deploy-verified`, and marks the finding closed. On `regression`, it opens a new finding (`regression after merge of #PR`) back through `feature-bug-complexity-classification`. The loop is closed.
 
 ## Autonomous mode (`/loop` and `/goal`)
 
 Three skills carry autonomous-mode sections:
 
 - [`transcript-to-bap-coworker`](transcript-to-bap-coworker/SKILL.md) supports `/loop 30m` for steady Grain polling and `/goal "<predicate>"` for batch backfills.
-- [`bap-finding-router`](bap-finding-router/SKILL.md) supports `/loop 60m` to drain a findings queue (`~/.claude/skills/bap-finding-router/queue.jsonl`) that upstream skills append to.
+- [`feature-bug-complexity-classification`](feature-bug-complexity-classification/SKILL.md) supports `/loop 60m` to drain a findings queue (`~/.claude/skills/feature-bug-complexity-classification/queue.jsonl`) that upstream skills append to.
 - [`bap-coworker-test-loop`](bap-coworker-test-loop/SKILL.md) supports `/goal` wrapping for re-entering the loop after an upstream change (typically a `bap-post-deploy-verify` Mode A pass).
 
 A future meta-coworker `@agent-builder` scheduled on HeyBap is the natural host for these loops. See each skill's "Autonomous mode" section for the exact patterns and predicates.
