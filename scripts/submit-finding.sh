@@ -93,7 +93,7 @@ Run the gate's full flow without asking for confirmation:
 3. Classification on the 12-criterion grid (SIMPLE vs COMPLEX). Default to COMPLEX when in doubt.
 4. Dispatch:
    - SIMPLE → \`bap-bug-report\` runs its own 5-subagent deep research, opens the PR, and creates the Linear ticket at status In Review (label Bug or Feature + Dogfooding, assignee Lubin).
-   - COMPLEX → \`bap-feature-brainstorm\` produces problem + 3 options + decision question, creates the Linear ticket at status Triage (label Need More Shaping + Bug or Feature + Dogfooding, assignee Baptiste). For capability gaps, \`bap-capability-impact-analyzer\` runs first so the ticket carries an Impact section.
+   - COMPLEX → \`bap-feature-brainstorm\` produces problem + 3 options + decision question, creates the Linear ticket at status Triage (label Need More Shaping + Bug or Feature + Dogfooding, assignee Baptiste). For capability gaps, Step 3b inside the brainstorm quantifies impact (Grain corpus + past builds + use cases unlocked + verdict) and the ticket carries an Impact section.
 
 Do not stop to ask for permission on any tool call. The .claude/settings.json in this repo pre-approves every tool the gate needs.
 

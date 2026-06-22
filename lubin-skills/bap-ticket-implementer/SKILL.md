@@ -80,7 +80,7 @@ The ticket must satisfy all of:
 - `assignee.displayName == "lubin"`
 - has label `agent-autonomous`
 - last comment is not one of: "wait", "blocked", "ne pas toucher", "@lubin please review first", or any comment newer than 24 h from a different user that ends with a question mark
-- description has a `## Fix proposé` section OR a `## Acceptance criteria` section OR an implementation sketch from `bap-capability-impact-analyzer`
+- description has a `## Fix proposé` section OR a `## Acceptance criteria` section OR an implementation sketch (from `bap-feature-brainstorm`'s Impact step, when the ticket came out of the SCOPED branch and an option was picked)
 - FINDING_CONTEXT block present (so the verifier can close the loop later)
 
 If any condition fails, post a Linear comment explaining which condition failed (single sentence), skip the ticket, and log.

@@ -13,8 +13,7 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 | [`bap-coworker-test-loop`](bap-coworker-test-loop/SKILL.md) | Run + observe + patch loop: `coworker_run` -> `coworker_logs` -> eval -> `coworker_update` until the coworker passes every success criterion. Supports sandbox-redirect and act-then-cleanup strategies per integration. |
 | [`transcript-to-bap-coworker`](transcript-to-bap-coworker/SKILL.md) | Meta-skill that chains the four above into one pipeline: transcript -> spec -> custom MCP(s) if needed -> skill bundle -> coworker -> tested. The "finish the call, walk out with the agents live" loop. |
 | [`feature-bug-complexity-classification`](feature-bug-complexity-classification/SKILL.md) | Single entry point for every HeyBap finding (manual via `./go.sh bug`/`feature` or auto from a pipeline step). Two-pass classification: pass 1 SIMPLE vs COMPLEX, pass 2 (COMPLEX only) SCOPED vs FUZZY. Three-way dispatch: `bap-bug-report` (SIMPLE: PR on `the-agentic-company/bap` + Linear ticket at `In Review`, assignee Lubin), `bap-feature-brainstorm` (COMPLEX-SCOPED: Linear ticket at `Triage` with label `Need More Shaping` carrying problem + 3 options + question, assignee Baptiste), or `bap-direction-shaping` (COMPLEX-FUZZY: Slack `#feature-brainstorming` post with problem + open questions, NO Linear ticket until the team picks a direction). |
-| [`bap-capability-impact-analyzer`](bap-capability-impact-analyzer/SKILL.md) | When a finding is a *capability gap* (HeyBap can't do X today), produce a structured impact analysis: adjacent use cases the missing capability would unlock (with evidence from past transcripts and past coworker builds), effort estimate (t-shirt size + lines + surfaces), implementation sketch, go/no-go recommendation with rationale. Output feeds `bap-feature-brainstorm` (Impact section) or posts as a Linear comment when invoked standalone on an existing `BAP-<n>`. |
-| [`bap-prior-art-scout`](bap-prior-art-scout/SKILL.md) | Before generating a new coworker / skill / MCP / panel, scan the operator's prior work for similar artefacts. 5 parallel angles: workspace coworkers (`mcp__bap__coworker_list`), past local builds (`~/HeyBap Pipeline/runs/`), vault projects (`~/Personal Agents/vault/projects/`), FDK skills, personal skills. Returns ranked matches with `reuseRecipe` and a `primaryReuse` recommendation that downstream skills bake into generation (copy + swap data binding, never structural rewrite). Mirror of the impact analyzer but for the creation side. |
+| [`bap-prior-art-scout`](bap-prior-art-scout/SKILL.md) | Before generating a new coworker / skill / MCP / panel, scan the operator's prior work for similar artefacts. 5 parallel angles: workspace coworkers (`mcp__bap__coworker_list`), past local builds (`~/HeyBap Pipeline/runs/`), vault projects (`~/Personal Agents/vault/projects/`), FDK skills, personal skills. Returns ranked matches with `reuseRecipe` and a `primaryReuse` recommendation that downstream skills bake into generation (copy + swap data binding, never structural rewrite). |
 | [`bap-platform-feasibility-check`](bap-platform-feasibility-check/SKILL.md) | For every external third-party platform the new coworker would interact with (Leboncoin, Se Loger, LinkedIn, Indeed, Welcome to the Jungle, Vinted, Booking, PAP, Bien Ici, Pipedrive, ...), run 5 parallel web-research angles (official API + tier, ToS posture, community MCPs / SDKs, browser-automation feasibility, known incidents) to verify the integration is actually achievable. Returns a verdict per platform (`feasible-via-api` / `feasible-via-mcp` / `feasible-via-browser` / `legally-risky` / `infeasible`) + recommended strategy + alternatives. Stops the pipeline from burning hours on an MCP whose target platform will block it on day one. |
 | [`bap-bug-report`](bap-bug-report/SKILL.md) | SIMPLE leaf. Clones the bap repo, reproduces the bug live (Chrome MCP for UI), creates a Linear ticket in team `Bap` to get an identifier (`BAP-<n>`), implements the quick fix on a branch named `fix/bap-<n>-slug`, opens a PR titled `BAP-<n> <Area>: …`, then transitions the Linear ticket to `In Review` and attaches the PR. Embeds a `FINDING_CONTEXT` JSON block in the Linear ticket description for downstream verification. |
 | [`bap-direction-shaping`](bap-direction-shaping/SKILL.md) | COMPLEX-FUZZY leaf. Used when a finding is too unclear or product-direction-impacting to ticket directly (surface unknown, cross-cutting, multiple plausible products, or product-fit unclear). Produces a structured problem statement (problem + why fuzzy + possible surfaces + 3-5 open questions + origin) and posts it in Slack `#feature-brainstorming` for team discussion. No Linear ticket is created here; once the team converges on a direction, the operator re-files via the gate with the new context and it lands in Linear through the standard SIMPLE or COMPLEX-SCOPED path. |
@@ -76,17 +75,18 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
        (SIMPLE)         brainstorm       (COMPLEX-FUZZY)
        Linear BAP-<n>   (COMPLEX-        Slack #feature-brainstorming
         at In Review,    SCOPED)         post: problem + open
-        assignee Lubin,  ^               questions + origin.
-        + PR opened      | feature gap?  NO Linear ticket.
-        + FINDING_CONTEXT+ call first:   Off-ramp until team
-                         bap-capability- converges on direction.
-                         impact-analyzer Then re-file via gate.
-                         |
-                         v
-                       Linear BAP-<n> at Triage,
-                       Need More Shaping label,
-                       Impact + 3 options in body,
-                       assignee Baptiste
+        assignee Lubin,  Linear BAP-<n>  questions + origin.
+        + PR opened      at Triage,      NO Linear ticket.
+        + FINDING_CONTEXT Need More       Off-ramp until team
+        bug OR feature   Shaping label,  converges on direction.
+                         Impact + 3      Then re-file via gate.
+                         options in body
+                         (Impact step
+                          quantifies
+                          demand: scans
+                          Grain corpus +
+                          past builds),
+                         assignee Baptiste
               |
               v
        bap-ticket-implementer  (/loop 30m, autonomous)

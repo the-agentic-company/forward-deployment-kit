@@ -178,4 +178,3 @@ If `brainstorming_channel_id` is the placeholder, the skill resolves it at runti
 - [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md): the router that dispatches here when COMPLEX-FUZZY.
 - `bap-feature-brainstorm`: COMPLEX-SCOPED sibling. Creates a Linear ticket with 3 defensible options + decision question, assignee Baptiste. Lives in `~/.claude/skills/bap-feature-brainstorm/`. Use when the surface is known and we need a Baptiste position on the implementation path.
 - `bap-bug-report`: SIMPLE sibling. Implements the fix, opens the PR, creates the Linear ticket.
-- `bap-capability-impact-analyzer`: NOT invoked from this skill (FUZZY findings don't have enough scope for an impact estimate). It is invoked from `bap-feature-brainstorm` for COMPLEX-SCOPED capability gaps.
