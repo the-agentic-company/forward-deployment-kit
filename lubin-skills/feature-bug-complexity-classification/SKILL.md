@@ -5,15 +5,19 @@ description: |
   signals it manually (ad-hoc bug/feature noticed during day-to-day usage)
   or a pipeline step auto-detects it (parser, prior-art scout, feasibility
   check, test loop, orchestrator). Classifies the finding on a strict
-  simple-vs-complex grid and dispatches to one of two leaf skills:
-  `bap-bug-report` (SIMPLE: investigates, implements the quick fix on a
-  branch in `the-agentic-company/bap`, opens a PR, creates a Linear ticket
-  in team `Bap` at status `In Review` linked to the PR) or
-  `bap-feature-brainstorm` (COMPLEX: investigates, frames the finding as
-  problem + 3 options + decision question, creates a Linear ticket in team
-  `Bap` at status `Triage` with label `Need More Shaping`). Linear sends
-  notifications on create / update on its own; no Slack post. Use whenever
-  `parse-transcript-to-agent-spec`, `bap-coworker-test-loop`,
+  grid that produces three outcomes: SIMPLE, COMPLEX-SCOPED, or
+  COMPLEX-FUZZY. Dispatches to one of three leaf skills:
+  `bap-bug-report` (SIMPLE: implements the quick fix on a branch in
+  `the-agentic-company/bap`, opens a PR, creates a Linear ticket at status
+  `In Review` linked to the PR, assignee Lubin); `bap-feature-brainstorm`
+  (COMPLEX-SCOPED: investigates, frames the finding as problem + 3 options
+  + decision question, creates a Linear ticket at status `Triage` with
+  label `Need More Shaping`, assignee Baptiste); or `bap-direction-shaping`
+  (COMPLEX-FUZZY: posts a structured problem statement in Slack
+  `#feature-brainstorming` for team discussion, NO Linear ticket created
+  until the team converges on a direction). Linear sends notifications on
+  create / update on its own; the router itself never posts to Slack.
+  Use whenever `parse-transcript-to-agent-spec`, `bap-coworker-test-loop`,
   `transcript-to-bap-coworker`, or the operator observes a HeyBap gap.
 ---
 
@@ -71,7 +75,7 @@ Do not invoke for findings outside HeyBap: a bug in a third-party MCP, a Notion 
 
 `operatorConfidence` is the calling skill's own estimate of "how sure am I this is a real HeyBap issue vs my own misuse". The router uses it in the classification.
 
-## Classification grid (the only rule that matters)
+## Classification grid — pass 1 (SIMPLE vs COMPLEX)
 
 A finding is **SIMPLE** if and only if EVERY criterion in the grid below is true. If even one is false, it is **COMPLEX**. When in doubt, classify as COMPLEX (failsafe).
 
@@ -90,6 +94,24 @@ A finding is **SIMPLE** if and only if EVERY criterion in the grid below is true
 | Bug only: live reproducible deterministically in <5 min | yes (bugs only) |
 | Feature only: scope fits in a single PR description (<= 5 bullets) | yes (features only) |
 
+## Classification grid — pass 2 (COMPLEX sub-split: SCOPED vs FUZZY)
+
+If the finding is COMPLEX, a second pass decides whether it is **COMPLEX-SCOPED** (known surface, design call needed, ticketable now) or **COMPLEX-FUZZY** (too unclear to ticket, needs Slack discussion first).
+
+The finding is **COMPLEX-FUZZY** if AT LEAST TWO of the following hold. With exactly one criterion true, default to **COMPLEX-SCOPED** (better to over-ticket than under-discuss).
+
+| Fuzziness criterion | Triggered when |
+|---------------------|---------------|
+| Surface unknown | No file:line or system boundary identified during the 5-min investigation |
+| Cross-cutting | Implementation would touch > 2 major surfaces (sandbox runtime, schema, MCP layer, panel UI, billing, multi-tenant) |
+| Multiple plausible products | More than one defensible "shape" could come out of the idea, no obvious winner |
+| Product-fit unclear | Genuinely undecided whether HeyBap should solve this at all (vs document as out of scope, vs redirect to a third-party) |
+| Confidence band | `operatorConfidence` is in `[0.6, 0.75)` (strong enough to discuss, not strong enough to ticket) |
+
+Record the set of triggered criteria as `fuzzyReasons[]` and pass them downstream so the Slack post can anchor its "Why this is fuzzy" line on the actual signals.
+
+If COMPLEX with zero fuzziness criteria → COMPLEX-SCOPED.
+
 ## Investigation step (5 minutes, hard cap)
 
 Before classifying, the router does a focused investigation:
@@ -98,19 +120,21 @@ Before classifying, the router does a focused investigation:
 2. Grep for the evidence references provided (`file:line` if any).
 3. Estimate: which files would the fix touch, how many lines, does it cross any of the failsafe boundaries above.
 4. Form an operator-side opinion on the fix path (this is what gets passed downstream).
+5. Note the fuzziness signals from pass 2: did the investigation localize a surface? How many surfaces would the fix touch? Is operatorConfidence in the fuzzy band? These feed the SCOPED/FUZZY sub-split.
 
-If the 5-minute cap is reached without a confident classification, default to COMPLEX. The router never burns more than 5 minutes per finding; deep investigation lives downstream (`bap-bug-report` or `bap-feature-brainstorm`).
+If the 5-minute cap is reached without a confident classification, default to COMPLEX. If COMPLEX with two or more fuzziness criteria → FUZZY. The router never burns more than 5 minutes per finding; deep investigation lives downstream (`bap-bug-report`, `bap-feature-brainstorm`, or `bap-direction-shaping`).
 
 ## Dispatch matrix
 
-After classification, two destinations:
+After classification, three destinations:
 
 | classification | downstream skill | output |
 |----------------|------------------|--------|
 | SIMPLE (bug or feature) | `bap-bug-report` | Branch + quick fix implemented + PR opened on `the-agentic-company/bap` + Linear ticket created in team `Bap` at status `In Review`, labels `Bug` or `Feature` + `Dogfooding`, assignee **Lubin** (operator owns the PR), PR URL attached. Features whose fix exceeds ~50 lines land as draft PRs with a TODO checklist in the ticket body (handled by `bap-bug-report` itself). |
-| COMPLEX (feature OR structural bug) | `bap-feature-brainstorm` | Investigation + problem statement + 3 defensible options + decision question, posted as a Linear ticket in team `Bap` at status `Triage`, labels `Need More Shaping` + (`Bug` or `Feature`) + `Dogfooding`, assignee **Baptiste** (CTO drives the design choice). When the finding is a capability gap, `bap-capability-impact-analyzer` is invoked first so the ticket carries an Impact section (use cases unlocked, effort estimate, recommendation). No PR opened. Implementation goes through `bap-bug-report` in a follow-up once the team picks an option (the brainstorm ticket then gets transitioned to `In Progress` and a new SIMPLE ticket is opened with `relatedTo` set to it). |
+| COMPLEX-SCOPED (surface known, design call required) | `bap-feature-brainstorm` | Investigation + problem statement + 3 defensible options + decision question, posted as a Linear ticket in team `Bap` at status `Triage`, labels `Need More Shaping` + (`Bug` or `Feature`) + `Dogfooding`, assignee **Baptiste** (CTO drives the design choice). When the finding is a capability gap, `bap-capability-impact-analyzer` is invoked first so the ticket carries an Impact section (use cases unlocked, effort estimate, recommendation). No PR opened. Implementation goes through `bap-bug-report` in a follow-up once the team picks an option (the brainstorm ticket then gets transitioned to `In Progress` and a new SIMPLE ticket is opened with `relatedTo` set to it). |
+| COMPLEX-FUZZY (direction unclear, no obvious surface, big changes) | `bap-direction-shaping` | Structured problem statement (problem + why fuzzy + possible surfaces + open questions + origin) posted in Slack `#feature-brainstorming` via the Slack MCP. **NO Linear ticket created** at this stage. If the team converges on a direction, the finding gets re-filed via the gate with the new context and lands as SIMPLE or COMPLEX-SCOPED on the next pass. |
 
-The router does not create the ticket itself. It only classifies and forwards. The downstream skill owns the rest of the loop (investigation depth, PR, Linear ticket creation, dedup of its own kind).
+The router does not create the ticket (or Slack post) itself. It only classifies and forwards. The downstream skill owns the rest of the loop (investigation depth, PR, Linear ticket creation, Slack post, dedup of its own kind).
 
 ## Dedup before dispatch
 
@@ -146,17 +170,27 @@ The router returns a structured result to the calling skill:
 
 ```json
 {
-  "verdict": "dispatched | already-reported | low-confidence | config-missing",
-  "classification": { "kind": "bug", "complexity": "simple" },
-  "downstreamSkill": "bap-bug-report | bap-feature-brainstorm",
+  "verdict": "dispatched | already-reported | already-discussed | low-confidence | config-missing",
+  "classification": {
+    "kind": "bug",
+    "complexity": "simple | complex-scoped | complex-fuzzy",
+    "fuzzyReasons": ["surface-unknown", "cross-cutting"]
+  },
+  "downstreamSkill": "bap-bug-report | bap-feature-brainstorm | bap-direction-shaping",
   "linearTicketIdentifier": "BAP-123",
   "linearTicketUrl": "https://linear.app/heybap/issue/BAP-123",
   "prUrl": "https://github.com/the-agentic-company/bap/pull/456",
+  "slackThreadUrl": "https://the-agentic-company.slack.com/archives/CXXX/p1750000000",
   "notes": "<1-line summary suitable for the orchestrator's final report>"
 }
 ```
 
-`prUrl` is set only when the downstream is `bap-bug-report` and the PR was opened. The orchestrator (`transcript-to-bap-coworker`) consolidates these results in its final report's "HeyBap findings" section.
+- `prUrl` is set only when downstream is `bap-bug-report` and the PR was opened.
+- `linearTicketIdentifier` / `linearTicketUrl` are set for `bap-bug-report` (SIMPLE) and `bap-feature-brainstorm` (COMPLEX-SCOPED). They are **absent** for `bap-direction-shaping` (COMPLEX-FUZZY) since no Linear ticket is created at that stage.
+- `slackThreadUrl` is set only for `bap-direction-shaping` (COMPLEX-FUZZY).
+- `fuzzyReasons` is populated only when complexity is `complex-fuzzy`; empty otherwise.
+
+The orchestrator (`transcript-to-bap-coworker`) consolidates these results in its final report's "HeyBap findings" section, splitting them into "Tickets opened" and "Direction discussions opened".
 
 ## Invocation patterns
 
@@ -211,9 +245,11 @@ The operator types a short message like `bug in heybap: coworker_run is super sl
 
 **Same gate, same rules**. Manual triggers go through the SAME classification grid, the SAME dedup window (60 days on Linear team `Bap`), the SAME confidence floor (0.6). The only difference is that `context.evidence` is usually thin (just the description) and the 5-minute investigation has to localize the surface from scratch instead of taking a `file:line` reference. The dedup check is even more important here because the operator might already have filed a similar finding from an auto trigger earlier.
 
-### From `bap-bug-report` or `bap-feature-brainstorm` (not allowed)
+### From `bap-bug-report`, `bap-feature-brainstorm`, or `bap-direction-shaping` (not allowed)
 
 The downstream skills must not invoke the router. The router is the entry; the downstream skills are leaves. If a downstream skill discovers a *second* finding during its investigation, it surfaces that to the caller (the router or the human), who can re-invoke the router on it.
+
+When a `bap-direction-shaping` Slack thread converges on a direction, the operator (or a teammate) re-files the finding via the gate with the added context (`./go.sh bug "..."` or `./go.sh feature "..."` with the new clarity). The gate then classifies it as SIMPLE or COMPLEX-SCOPED and the standard Linear path takes over. The Slack thread URL is included in the new ticket's body for traceability.
 
 ## Invocation from a scheduled meta-coworker (`/loop`)
 
@@ -232,14 +268,16 @@ The queue file becomes the in-flight dedup registry mentioned in the roadmap (ax
 
 ## Anti-patterns
 
-- Calling `bap-bug-report` or `bap-feature-brainstorm` directly from a pipeline skill instead of going through the router. The router enforces classification + dedup + correct destination; bypassing it loses those.
+- Calling `bap-bug-report`, `bap-feature-brainstorm`, or `bap-direction-shaping` directly from a pipeline skill instead of going through the router. The router enforces classification + dedup + correct destination; bypassing it loses those.
 - Classifying a finding as SIMPLE because the operator *wants* it to be a quick fix. Apply the grid strictly. A 60-line change touching two surfaces is COMPLEX.
 - Skipping the 5-minute investigation. Without it, the classification is a guess and the dispatch is unsafe.
 - Dispatching when `operatorConfidence < 0.6`. Reproduce first.
-- Letting the router run longer than 5 minutes. If the classification is still uncertain at that cap, default to COMPLEX and let `bap-feature-brainstorm` investigate at depth.
-- Dispatching a structural bug to `bap-bug-report` because "it is a bug, that is the bug skill". Structural bugs that need design discussion go to `bap-feature-brainstorm` (which accepts COMPLEX bugs as well, see its frontmatter). Use the grid, not the kind.
+- Letting the router run longer than 5 minutes. If the classification is still uncertain at that cap, default to COMPLEX (and to COMPLEX-FUZZY if at least two fuzziness criteria triggered).
+- Dispatching a structural bug to `bap-bug-report` because "it is a bug, that is the bug skill". Structural bugs that need design discussion go to `bap-feature-brainstorm` (SCOPED) or `bap-direction-shaping` (FUZZY). Use the grid, not the kind.
+- **Classifying as FUZZY on a single criterion**. Default to COMPLEX-SCOPED unless at least TWO fuzziness criteria triggered. A premature FUZZY classification dumps a half-shaped problem into Slack and slows the team down.
+- **Classifying as SCOPED when no surface is identified after 5 min**. Without a surface, `bap-feature-brainstorm` cannot frame 3 defensible options. Dispatch FUZZY so the team helps narrow the surface in Slack before any Linear ticket.
 - Re-routing once a downstream skill has already started. The router is the entry; downstream skills do not call back into it.
-- Posting to Slack instead of creating a Linear ticket. Linear is the canonical surface; Slack notifications are derived from Linear's own integrations.
+- Posting to Slack on SCOPED findings, or creating a Linear ticket on FUZZY findings. The two destinations are mutually exclusive at the dispatch layer.
 
 ## Config and ids
 
@@ -280,6 +318,7 @@ If `team_id` is missing or set to the placeholder, the router refuses to dispatc
 - [parse-transcript-to-agent-spec](../parse-transcript-to-agent-spec/SKILL.md): one of the upstream invokers.
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): the most prolific source of findings (every diagnose step is a potential finding).
 - [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md): the orchestrator that aggregates findings into the final report.
+- [bap-direction-shaping](../bap-direction-shaping/SKILL.md): dispatched for COMPLEX-FUZZY findings. Posts a structured problem statement in Slack `#feature-brainstorming` for team discussion. No Linear ticket created at that stage.
 - `bap-bug-report`: dispatched for SIMPLE findings (bug or small feature). Creates the Linear ticket at status `In Review` AND opens the PR. Lives in `lubin-skills/bap-bug-report/`.
-- `bap-feature-brainstorm`: dispatched for COMPLEX findings (feature or structural bug). Creates the Linear ticket at status `Triage` with label `Need More Shaping`. Lives in `~/.claude/skills/bap-feature-brainstorm/`.
-- `bap-post-deploy-verify`: transitions the Linear ticket to `Live` after a verified post-deploy run, or opens a new Linear ticket labeled `Regression` (linked via `relatedTo`) if the finding came back.
+- `bap-feature-brainstorm`: dispatched for COMPLEX-SCOPED findings (feature or structural bug with a known surface). Creates the Linear ticket at status `Triage` with label `Need More Shaping`, assignee Baptiste. Lives in `~/.claude/skills/bap-feature-brainstorm/`.
+- `bap-post-deploy-verify`: transitions the Linear ticket to `Live` after a verified post-deploy run, or opens a new Linear ticket labeled `Regression` (linked via `relatedTo`) if the finding came back. Only runs against tickets from `bap-bug-report` / `bap-feature-brainstorm`; FUZZY findings never reach it (no ticket exists).

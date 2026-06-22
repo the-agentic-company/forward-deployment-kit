@@ -12,11 +12,12 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 | [`parse-transcript-to-agent-spec`](parse-transcript-to-agent-spec/SKILL.md) | Read a sales / discovery transcript and emit a strict JSON spec describing the coworker(s) the conversation implies (goal, steps, tools, success criteria, test payloads). |
 | [`bap-coworker-test-loop`](bap-coworker-test-loop/SKILL.md) | Run + observe + patch loop: `coworker_run` -> `coworker_logs` -> eval -> `coworker_update` until the coworker passes every success criterion. Supports sandbox-redirect and act-then-cleanup strategies per integration. |
 | [`transcript-to-bap-coworker`](transcript-to-bap-coworker/SKILL.md) | Meta-skill that chains the four above into one pipeline: transcript -> spec -> custom MCP(s) if needed -> skill bundle -> coworker -> tested. The "finish the call, walk out with the agents live" loop. |
-| [`feature-bug-complexity-classification`](feature-bug-complexity-classification/SKILL.md) | Single entry point for every HeyBap finding observed during the pipeline. Classifies SIMPLE vs COMPLEX, dispatches to `bap-bug-report` (PR on `the-agentic-company/bap` + Linear ticket in team `Bap` at status `In Review`, assignee Lubin) or `bap-feature-brainstorm` (Linear ticket at status `Triage` with label `Need More Shaping` carrying problem + 3 options + decision question, assignee Baptiste). Linear's own integrations notify the team; no direct Slack post. |
+| [`feature-bug-complexity-classification`](feature-bug-complexity-classification/SKILL.md) | Single entry point for every HeyBap finding (manual via `./go.sh bug`/`feature` or auto from a pipeline step). Two-pass classification: pass 1 SIMPLE vs COMPLEX, pass 2 (COMPLEX only) SCOPED vs FUZZY. Three-way dispatch: `bap-bug-report` (SIMPLE: PR on `the-agentic-company/bap` + Linear ticket at `In Review`, assignee Lubin), `bap-feature-brainstorm` (COMPLEX-SCOPED: Linear ticket at `Triage` with label `Need More Shaping` carrying problem + 3 options + question, assignee Baptiste), or `bap-direction-shaping` (COMPLEX-FUZZY: Slack `#feature-brainstorming` post with problem + open questions, NO Linear ticket until the team picks a direction). |
 | [`bap-capability-impact-analyzer`](bap-capability-impact-analyzer/SKILL.md) | When a finding is a *capability gap* (HeyBap can't do X today), produce a structured impact analysis: adjacent use cases the missing capability would unlock (with evidence from past transcripts and past coworker builds), effort estimate (t-shirt size + lines + surfaces), implementation sketch, go/no-go recommendation with rationale. Output feeds `bap-feature-brainstorm` (Impact section) or posts as a Linear comment when invoked standalone on an existing `BAP-<n>`. |
 | [`bap-prior-art-scout`](bap-prior-art-scout/SKILL.md) | Before generating a new coworker / skill / MCP / panel, scan the operator's prior work for similar artefacts. 5 parallel angles: workspace coworkers (`mcp__bap__coworker_list`), past local builds (`~/HeyBap Pipeline/runs/`), vault projects (`~/Personal Agents/vault/projects/`), FDK skills, personal skills. Returns ranked matches with `reuseRecipe` and a `primaryReuse` recommendation that downstream skills bake into generation (copy + swap data binding, never structural rewrite). Mirror of the impact analyzer but for the creation side. |
 | [`bap-platform-feasibility-check`](bap-platform-feasibility-check/SKILL.md) | For every external third-party platform the new coworker would interact with (Leboncoin, Se Loger, LinkedIn, Indeed, Welcome to the Jungle, Vinted, Booking, PAP, Bien Ici, Pipedrive, ...), run 5 parallel web-research angles (official API + tier, ToS posture, community MCPs / SDKs, browser-automation feasibility, known incidents) to verify the integration is actually achievable. Returns a verdict per platform (`feasible-via-api` / `feasible-via-mcp` / `feasible-via-browser` / `legally-risky` / `infeasible`) + recommended strategy + alternatives. Stops the pipeline from burning hours on an MCP whose target platform will block it on day one. |
 | [`bap-bug-report`](bap-bug-report/SKILL.md) | SIMPLE leaf. Clones the bap repo, reproduces the bug live (Chrome MCP for UI), creates a Linear ticket in team `Bap` to get an identifier (`BAP-<n>`), implements the quick fix on a branch named `fix/bap-<n>-slug`, opens a PR titled `BAP-<n> <Area>: …`, then transitions the Linear ticket to `In Review` and attaches the PR. Embeds a `FINDING_CONTEXT` JSON block in the Linear ticket description for downstream verification. |
+| [`bap-direction-shaping`](bap-direction-shaping/SKILL.md) | COMPLEX-FUZZY leaf. Used when a finding is too unclear or product-direction-impacting to ticket directly (surface unknown, cross-cutting, multiple plausible products, or product-fit unclear). Produces a structured problem statement (problem + why fuzzy + possible surfaces + 3-5 open questions + origin) and posts it in Slack `#feature-brainstorming` for team discussion. No Linear ticket is created here; once the team converges on a direction, the operator re-files via the gate with the new context and it lands in Linear through the standard SIMPLE or COMPLEX-SCOPED path. |
 | [`bap-post-deploy-verify`](bap-post-deploy-verify/SKILL.md) | Closes the loop after a PR is merged + deployed. Three modes: A (re-run coworker, default), B (Chrome MCP visual repro), C (headless Playwright spec generated per finding and committed for permanent regression). Verdict on Pass: comments the Linear ticket and transitions it to `Live` (completed-type status). On Fail: opens a new Linear ticket via `feature-bug-complexity-classification` labelled `Regression` and linked to the original via `relatedTo`. |
 | [`bap-ticket-implementer`](bap-ticket-implementer/SKILL.md) | Autonomous loop that drains Linear tickets assigned to Lubin with label `agent-autonomous`. Reads description + comments + linked PR, runs the same 5-subagent deep-research pass as `bap-bug-report` (to confirm the fix is still applicable today), implements ≤ 120 lines on a branch, opens or updates the PR, comments the ticket with the SHA, and posts a one-liner in Slack `#dev`. Refuses on ambiguous / large / stale tickets. `/loop 30m`. |
 | [`bap-favorite-coworker-watchdog`](bap-favorite-coworker-watchdog/SKILL.md) | Continuous watchdog over the operator's PRODUCTION coworkers (those marked favorite via `mcp__bap__coworker_setFavorite`). On each tick, lists favorites, pulls recent runs + logs, applies 5 anomaly checks (terminal failure, silent output drift, missing tool_use vs contract, drastic slowdown, missed schedule). Coworker-side anomalies → Slack `#agents-production`. Platform-side → Linear via `feature-bug-complexity-classification`. `/loop 60m`, escalates to @lubin on 3rd consecutive same-anomaly tick. |
@@ -55,19 +56,22 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
               every step may emit a finding
                       |
                       v
-              feature-bug-complexity-classification  (classify, dispatch)
+              feature-bug-complexity-classification  (classify, 3-way dispatch)
                       |
-              +-------+--------+
-              |                |
-              v                v
-       bap-bug-report   bap-feature-brainstorm
-       (Linear BAP-<n>          ^
-        at In Review,           |  feature gap?  call first:
-        assignee Lubin,         +- bap-capability-impact-analyzer
-        + PR opened             |  (use cases unlocked, t-shirt
-        + FINDING_CONTEXT       |   size, implement|wait|defer|
-        in ticket body)         |   won't fix verdict)
-                                v
+              +-------+--------+----------------+
+              |                |                |
+              v                v                v
+       bap-bug-report   bap-feature-     bap-direction-shaping
+       (SIMPLE)         brainstorm       (COMPLEX-FUZZY)
+       Linear BAP-<n>   (COMPLEX-        Slack #feature-brainstorming
+        at In Review,    SCOPED)         post: problem + open
+        assignee Lubin,  ^               questions + origin.
+        + PR opened      | feature gap?  NO Linear ticket.
+        + FINDING_CONTEXT+ call first:   Off-ramp until team
+                         bap-capability- converges on direction.
+                         impact-analyzer Then re-file via gate.
+                         |
+                         v
                        Linear BAP-<n> at Triage,
                        Need More Shaping label,
                        Impact + 3 options in body,
@@ -195,12 +199,13 @@ The orchestrator emits a Markdown report at the end listing live coworkers, item
 
 Each pipeline skill (`parse-transcript-to-agent-spec`, `bap-coworker-test-loop`, `transcript-to-bap-coworker`) has a dedicated "Report HeyBap bugs and feature gaps" section that mandates invoking [`feature-bug-complexity-classification`](feature-bug-complexity-classification/SKILL.md) whenever a platform misbehaviour, missing API, or feature gap is observed. The router is the only entry point; the pipeline skills do not call the leaves directly.
 
-Routing:
+Routing (3-way dispatch):
 
 - **SIMPLE** (small diff, single surface, low design risk, operator confidence >= 0.8): the router dispatches to `bap-bug-report` (in `lubin-skills/bap-bug-report/`), which creates a Linear ticket in team `Bap` to claim a `BAP-<n>` identifier, clones `the-agentic-company/bap`, implements the quick fix on a branch named `fix/bap-<n>-slug`, opens a PR titled `BAP-<n> <Area>: …`, then transitions the Linear ticket to `In Review` with the PR attached. Linear's GitHub integration auto-links the branch + PR via the identifier; Linear's Slack / email notifications cover the team.
-- **COMPLEX** (multi-surface, data model touched, design choice with multiple defensible answers): the router dispatches to `bap-feature-brainstorm` (in `~/.claude/skills/bap-feature-brainstorm/`), which creates a Linear ticket in team `Bap` at status `Triage` with labels `Need More Shaping` + (`Bug` or `Feature`) + `Dogfooding`, containing the problem + 3 options + decision question. The team picks on the ticket; the implementation then goes through `bap-bug-report` in a follow-up that opens its own ticket linked back to the brainstorm via `relatedTo`.
+- **COMPLEX-SCOPED** (multi-surface OR design choice with multiple defensible answers, BUT the surface is known and the change is genuinely ticketable): the router dispatches to `bap-feature-brainstorm` (in `~/.claude/skills/bap-feature-brainstorm/`), which creates a Linear ticket in team `Bap` at status `Triage` with labels `Need More Shaping` + (`Bug` or `Feature`) + `Dogfooding`, containing the problem + 3 options + decision question. Assignee Baptiste (CTO drives the design choice). The team picks on the ticket; the implementation then goes through `bap-bug-report` in a follow-up that opens its own ticket linked back to the brainstorm via `relatedTo`.
+- **COMPLEX-FUZZY** (surface unknown, cross-cutting >2 major surfaces, multiple plausible products with no obvious winner, or product-fit unclear — at least TWO criteria triggered): the router dispatches to `bap-direction-shaping` (in `lubin-skills/bap-direction-shaping/`), which posts a structured problem statement in Slack `#feature-brainstorming` (problem + why fuzzy + possible surfaces + 3-5 open questions + origin). **No Linear ticket is created at this stage**. The team discusses; once they converge on a direction, someone re-files the finding via the gate with the added context and it lands in Linear through the SIMPLE or COMPLEX-SCOPED path.
 
-The router's classification grid is strict (lines changed, files touched, schema impact, breaking change, operator confidence). Findings that fail any criterion are COMPLEX by default; this keeps risky changes out of auto-merge territory and gives the team a chance to weigh in.
+The router's classification grid is strict (lines changed, files touched, schema impact, breaking change, operator confidence). Findings that fail any criterion are COMPLEX by default; from there a second pass decides SCOPED vs FUZZY. Single-criterion fuzziness falls back to SCOPED (better to over-ticket than under-discuss); two or more fuzziness criteria triggers FUZZY.
 
 This keeps the feedback loop tight between forward-deployment work and the HeyBap roadmap. If you fork this kit and run it on your own workspace, swap the leaf skills for your own equivalents (the router contract is generic; the leaves are environment-specific).
 
