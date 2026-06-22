@@ -197,6 +197,44 @@ For each item in `agent.neededTools`:
 | `sandbox_cli` | No wiring; the agent prompt will reference the CLI per rule #16 of `build-agents-for-bap`. |
 | `custom_mcp_to_build` | **First check `priorArt.matches` for an existing MCP** (vault project with `mcp-handler` in `package.json`, or a workspace MCP already deployed). If found: downgrade to `existing_workspace_mcp` if the workspace MCP id is known, or re-deploy the vault project (no rebuild from scratch). Only trigger [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md) (Step 2b) when no prior MCP fits. |
 
+### Step 2c. Detect mini-app shape (live / stateful / multi-user)
+
+For each agent, inspect `spec.agents[*].outputs[*]` for signals that the artefact is not a one-shot HTML page but a **live mini-app** (the `/app/output.html` becomes a shell into a long-running external backend). Trigger shapes:
+
+- live updates / real-time / SSE / streaming dashboard
+- multi-user collaboration / shared session / room
+- live transcript / live copilot / call assistant
+- queue / job status / progress poller
+- mutable state the user edits in the panel and that must persist across runs
+
+When any trigger applies, the agent needs `build-mini-apps-for-bap` (the third tool-layer skill alongside `build-mcp-for-bap` and `build-agents-for-bap`). Add a `miniApp` block to the agent's `toolPlan`:
+
+```
+toolPlan.miniApp = {
+  needed: true,
+  pattern: "live-copilot | dashboard | progress-poller | multi-user-room | mutable-state",
+  referenceBuild: "heybap-live-copilot",   // or another vault project from priorArt
+  backendKind: "vercel-next | fly | cloudflare-workers",
+  needsBackend: true                       // false only when the panel is fully self-contained (rare)
+}
+```
+
+The orchestrator then runs Step 2d (next) instead of jumping to Step 3.
+
+### Step 2d. Scaffold the mini-app backend when needed
+
+If `toolPlan.miniApp.needed == true`:
+
+1. Invoke [build-mini-apps-for-bap](../build-mini-apps-for-bap/SKILL.md) with the agent spec + the chosen pattern. Reference build is `vault/projects/heybap-live-copilot/` (or whatever the prior-art scout returned for this output shape).
+2. Scaffold the external backend (Vercel + Next.js + KV / pub-sub) following the patterns in the skill.
+3. Deploy with `vercel deploy --prod --yes`, capture the `live_url` template (typically `https://<project>.vercel.app/session/<session_id>`).
+4. Add an MCP tool `start_session` (or equivalent) that the agent calls at run start to mint a session and return the live URL. Wire this MCP via Step 2b's HUMAN STOP if it's a new workspace MCP.
+5. Step 3's skill folder generation then emits a `render.py` that opens `/app/output.html` with the `<live_url>` baked in, plus the HTML scaffold that opens the `EventSource` and posts user actions back via `fetch`.
+
+If the prior-art scout already returned a vault project that fits (typically `heybap-live-copilot` for live-copilot patterns), the scaffold reuses that project's backend rather than starting fresh; the new agent gets its own session route on the existing deployment.
+
+If no mini-app signals are detected, skip to Step 3 directly.
+
 ### Step 2b. Build custom MCP when needed
 
 When `customMcpsToBuild` is non-empty, for each entry:

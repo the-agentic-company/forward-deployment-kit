@@ -1,0 +1,23 @@
+linear:
+  team_key: "BAP"
+  team_id: "5ff3b86a-a1a5-4241-ac5c-e65a143f16e3"
+  assignee_username: "lubin"
+  trigger_label: "agent-autonomous"
+  refresh_label: "needs-refresh"
+  statuses:
+    triage: "b63fe240-0351-4011-a754-3b69c3cc5c99"
+    in_progress: "2494a4a4-9b9a-4cff-a4b6-91d499dcf4d2"
+    in_review: "423d89b9-126c-4db1-aa27-05b25baafd20"
+slack:
+  workspace: "The Agentic Company"
+  dev_channel_id: "REPLACE_WITH_DEV_CHANNEL_ID"   # resolved at runtime via slack_search_channels({ query: "dev" }) if placeholder
+github:
+  repo: "the-agentic-company/bap"
+  branch_prefix: "fix/bap-"
+  pr_label: "autonomous-implementation"
+limits:
+  cadence_minutes: 30
+  max_lines_per_commit: 120
+  max_implementations_per_tick: 5
+  confidence_floor: 0.7
+log_path: "~/HeyBap Pipeline/logs/ticket-implementer.jsonl"

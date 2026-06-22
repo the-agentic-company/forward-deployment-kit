@@ -8,6 +8,7 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 |-------|-----------|
 | [`build-mcp-for-bap`](build-mcp-for-bap/SKILL.md) | Scaffold a custom HTTP MCP server (Next.js + Vercel) that satisfies Bap's OAuth 2.0 auto-approve dance. |
 | [`build-agents-for-bap`](build-agents-for-bap/SKILL.md) | Ship reliable coworkers: skill design, MCP wiring, auth modes, sandbox layout, debugging via `coworker_logs`. The agent-side counterpart of `build-mcp-for-bap`. |
+| [`build-mini-apps-for-bap`](build-mini-apps-for-bap/SKILL.md) | Build INTERACTIVE mini-apps inside coworkers: pair a thin Bap skill (renders `/app/output.html` once) with an EXTERNAL backend (Vercel / Fly / Cloudflare) for live state, SSE, multi-user collaboration, long-running jobs. Reference build: `vault/projects/heybap-live-copilot/`. Wired into the orchestrator at Step 2c when the parser sets `miniApp.needed = true`. |
 | [`parse-transcript-to-agent-spec`](parse-transcript-to-agent-spec/SKILL.md) | Read a sales / discovery transcript and emit a strict JSON spec describing the coworker(s) the conversation implies (goal, steps, tools, success criteria, test payloads). |
 | [`bap-coworker-test-loop`](bap-coworker-test-loop/SKILL.md) | Run + observe + patch loop: `coworker_run` -> `coworker_logs` -> eval -> `coworker_update` until the coworker passes every success criterion. Supports sandbox-redirect and act-then-cleanup strategies per integration. |
 | [`transcript-to-bap-coworker`](transcript-to-bap-coworker/SKILL.md) | Meta-skill that chains the four above into one pipeline: transcript -> spec -> custom MCP(s) if needed -> skill bundle -> coworker -> tested. The "finish the call, walk out with the agents live" loop. |
@@ -17,6 +18,8 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 | [`bap-platform-feasibility-check`](bap-platform-feasibility-check/SKILL.md) | For every external third-party platform the new coworker would interact with (Leboncoin, Se Loger, LinkedIn, Indeed, Welcome to the Jungle, Vinted, Booking, PAP, Bien Ici, Pipedrive, ...), run 5 parallel web-research angles (official API + tier, ToS posture, community MCPs / SDKs, browser-automation feasibility, known incidents) to verify the integration is actually achievable. Returns a verdict per platform (`feasible-via-api` / `feasible-via-mcp` / `feasible-via-browser` / `legally-risky` / `infeasible`) + recommended strategy + alternatives. Stops the pipeline from burning hours on an MCP whose target platform will block it on day one. |
 | [`bap-bug-report`](bap-bug-report/SKILL.md) | SIMPLE leaf. Clones the bap repo, reproduces the bug live (Chrome MCP for UI), creates a Linear ticket in team `Bap` to get an identifier (`BAP-<n>`), implements the quick fix on a branch named `fix/bap-<n>-slug`, opens a PR titled `BAP-<n> <Area>: …`, then transitions the Linear ticket to `In Review` and attaches the PR. Embeds a `FINDING_CONTEXT` JSON block in the Linear ticket description for downstream verification. |
 | [`bap-post-deploy-verify`](bap-post-deploy-verify/SKILL.md) | Closes the loop after a PR is merged + deployed. Three modes: A (re-run coworker, default), B (Chrome MCP visual repro), C (headless Playwright spec generated per finding and committed for permanent regression). Verdict on Pass: comments the Linear ticket and transitions it to `Live` (completed-type status). On Fail: opens a new Linear ticket via `feature-bug-complexity-classification` labelled `Regression` and linked to the original via `relatedTo`. |
+| [`bap-ticket-implementer`](bap-ticket-implementer/SKILL.md) | Autonomous loop that drains Linear tickets assigned to Lubin with label `agent-autonomous`. Reads description + comments + linked PR, runs the same 5-subagent deep-research pass as `bap-bug-report` (to confirm the fix is still applicable today), implements ≤ 120 lines on a branch, opens or updates the PR, comments the ticket with the SHA, and posts a one-liner in Slack `#dev`. Refuses on ambiguous / large / stale tickets. `/loop 30m`. |
+| [`bap-favorite-coworker-watchdog`](bap-favorite-coworker-watchdog/SKILL.md) | Continuous watchdog over the operator's PRODUCTION coworkers (those marked favorite via `mcp__bap__coworker_setFavorite`). On each tick, lists favorites, pulls recent runs + logs, applies 5 anomaly checks (terminal failure, silent output drift, missing tool_use vs contract, drastic slowdown, missed schedule). Coworker-side anomalies → Slack `#agents-production`. Platform-side → Linear via `feature-bug-complexity-classification`. `/loop 60m`, escalates to @lubin on 3rd consecutive same-anomaly tick. |
 
 ## How they relate
 
@@ -70,6 +73,12 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
                        Impact + 3 options in body,
                        assignee Baptiste
               |
+              v
+       bap-ticket-implementer  (/loop 30m, autonomous)
+       drains SIMPLE Linear tickets with label `agent-autonomous`:
+       reads ticket, 5-subagent research pass, implements <= 120 lines,
+       opens / updates PR, comments ticket, posts in Slack #dev
+              |
               v (after merge + deploy)
        bap-post-deploy-verify
        Mode A: re-run coworker
@@ -83,12 +92,24 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
      ticket to    feature-bug-complexity-classification,
      Live)        Regression label,
                   relatedTo original)
+
+
+  Continuous side-loop (parallel to everything else):
+
+       bap-favorite-coworker-watchdog  (/loop 60m)
+       lists @coworkers marked favorite (= in prod),
+       5 anomaly checks on recent runs/logs,
+       coworker-side issues -> Slack #agents-production,
+       platform-side issues -> Linear via
+       feature-bug-complexity-classification.
+       3rd consecutive same-anomaly tick: @lubin mention.
 ```
 
-- **Tool-layer** skills: `build-mcp-for-bap` (HTTP MCP), `build-agents-for-bap` (coworker rules).
+- **Tool-layer** skills: `build-mcp-for-bap` (HTTP MCP), `build-agents-for-bap` (coworker rules), `build-mini-apps-for-bap` (interactive panels with external backend).
 - **Pipeline** skills: `parse-transcript-to-agent-spec` (input -> structured spec), `bap-coworker-test-loop` (deployed -> validated), `transcript-to-bap-coworker` (chains everything), `feature-bug-complexity-classification` (HeyBap-side feedback).
+- **Autonomous loops**: `bap-ticket-implementer` (`/loop 30m`, drains tagged Linear tickets), `bap-favorite-coworker-watchdog` (`/loop 60m`, monitors production coworkers).
 
-The two tool-layer skills cover the full development loop on their own; the pipeline skills automate the path from a raw call transcript or operator brief to a tested live coworker, and the complexity-classification gate closes the feedback loop on the HeyBap platform itself.
+The three tool-layer skills cover the full development loop on their own; the pipeline skills automate the path from a raw call transcript or operator brief to a tested live coworker; the complexity-classification gate closes the feedback loop on the HeyBap platform itself; the autonomous loops run in parallel to drain the backlog and catch production drift before clients notice.
 
 ## How to use these in your own setup
 

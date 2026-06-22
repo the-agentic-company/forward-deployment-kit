@@ -138,6 +138,11 @@ Return one document with `agents[]` (array). Each agent is the unit consumed dow
           "successCriteriaRef": ["notion_spiced_filled", "notion_page_linked_to_deal"]
         }
       ],
+      "miniApp": {
+        "needed": false,
+        "pattern": null,
+        "rationale": "outputs are one-shot Slack message + Notion page; no live state."
+      },
       "neededTools": [
         { "name": "grain", "kind": "custom_mcp_to_build", "rationale": "No native Grain integration in Bap; PAT-based API exists." },
         { "name": "slack", "kind": "native_integration", "scopes": ["chat:write"] },
@@ -309,6 +314,35 @@ Before emitting an agent, sanity-check that the workflow matches what Bap (Heyba
 - Discard items that fail this platform-fit check.
 
 Document the decomposition logic in `transcriptSummary` so the human inspector sees why N became M.
+
+## Mini-app detection (the `miniApp` field on each agent)
+
+Some coworker outputs are not a one-shot artefact but a **live mini-app**: the `/app/output.html` is a shell into an external backend (Vercel / Fly / Cloudflare) that handles state, SSE streams, multi-user collaboration, or long-running jobs. The reference build is `vault/projects/heybap-live-copilot/` (live call copilot with SSE).
+
+For each agent, emit a `miniApp` block on the spec:
+
+```json
+"miniApp": {
+  "needed": true,
+  "pattern": "live-copilot | dashboard | progress-poller | multi-user-room | mutable-state",
+  "referenceBuild": "heybap-live-copilot",
+  "needsBackend": true,
+  "rationale": "<one sentence: which output shape triggered the mini-app detection>"
+}
+```
+
+Trigger shapes (any one is enough):
+
+- The transcript or brief mentions **live updates**, **real-time**, **streaming**, **SSE**.
+- The output is a **dashboard** with multiple metrics that must refresh without re-running the coworker.
+- Multiple users interact with the same artefact (**multi-user collaboration**, shared session, room).
+- A **live call copilot** / **live transcript** / **call assistant** that updates as the call progresses.
+- A **job queue** with status that the user polls (long-running batch, video render, OCR pipeline).
+- The user **edits values** inside the panel and they must persist across runs / for other users.
+
+When `miniApp.needed == true`, the orchestrator (`transcript-to-bap-coworker` Step 2c) routes to [build-mini-apps-for-bap](../build-mini-apps-for-bap/SKILL.md) to scaffold the external backend before generating the skill folder. The prior-art scout typically returns `heybap-live-copilot` as the primaryReuse for live-copilot patterns; the new agent then gets its own session route on the existing deployment.
+
+When `miniApp.needed == false`, the standard one-shot `output_template.html` path is used (Step 3 of the orchestrator).
 
 ## Prior-art enrichment (mandatory before emitting `neededTools[]`)
 
