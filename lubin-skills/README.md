@@ -6,9 +6,9 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 
 | Skill | One-liner |
 |-------|-----------|
-| [`build-mcp-for-bap`](build-mcp-for-bap/SKILL.md) | Scaffold a custom HTTP MCP server (Next.js + Vercel) that satisfies Bap's OAuth 2.0 auto-approve dance. |
-| [`build-agents-for-bap`](build-agents-for-bap/SKILL.md) | Ship reliable coworkers: skill design, MCP wiring, auth modes, sandbox layout, debugging via `coworker_logs`. The agent-side counterpart of `build-mcp-for-bap`. |
-| [`build-mini-apps-for-bap`](build-mini-apps-for-bap/SKILL.md) | Build INTERACTIVE mini-apps inside coworkers: pair a thin Bap skill (renders `/app/output.html` once) with an EXTERNAL backend (Vercel / Fly / Cloudflare) for live state, SSE, multi-user collaboration, long-running jobs. Reference build: `vault/projects/heybap-live-copilot/`. Wired into the orchestrator at Step 2c when the parser sets `miniApp.needed = true`. |
+| [`build-mcp-for-bap`](build-mcp-for-bap/SKILL.md) | Reference pattern (not a pipeline stage) for scaffolding a custom HTTP MCP server (Next.js + Vercel) that satisfies Bap's OAuth 2.0 auto-approve dance. Read by the orchestrator when a tool is needed and no existing MCP fits. |
+| [`build-agents-for-bap`](build-agents-for-bap/SKILL.md) | Reference rule set (24 proven coworker rules, not a pipeline stage): skill design, MCP wiring, auth modes, sandbox layout, debugging via `coworker_logs`. Read by the orchestrator before generating SKILL.md / render.py / agent prompt. The agent-side counterpart of `build-mcp-for-bap`. |
+| [`build-mini-apps-for-bap`](build-mini-apps-for-bap/SKILL.md) | Reference pattern (not a pipeline stage) for INTERACTIVE mini-apps inside coworkers: pair a thin Bap skill (renders `/app/output.html` once) with an EXTERNAL backend (Vercel / Fly / Cloudflare) for live state, SSE, multi-user collaboration, long-running jobs. Reference build: `vault/projects/heybap-live-copilot/`. Read by the orchestrator before scaffolding when the parser sets `miniApp.needed = true`. |
 | [`parse-transcript-to-agent-spec`](parse-transcript-to-agent-spec/SKILL.md) | Read a sales / discovery transcript and emit a strict JSON spec describing the coworker(s) the conversation implies (goal, steps, tools, success criteria, test payloads). |
 | [`bap-coworker-test-loop`](bap-coworker-test-loop/SKILL.md) | Run + observe + patch loop: `coworker_run` -> `coworker_logs` -> eval -> `coworker_update` until the coworker passes every success criterion. Supports sandbox-redirect and act-then-cleanup strategies per integration. |
 | [`transcript-to-bap-coworker`](transcript-to-bap-coworker/SKILL.md) | Meta-skill that chains the four above into one pipeline: transcript -> spec -> custom MCP(s) if needed -> skill bundle -> coworker -> tested. The "finish the call, walk out with the agents live" loop. |
@@ -25,35 +25,46 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 ## How they relate
 
 ```
-                   transcript-to-bap-coworker  (orchestrator)
-                              |
-              +---------------+----------------+
-              |               |                |
-              v               v                v
-       parse-transcript    build-mcp        build-agents
-        -to-agent-spec     -for-bap         -for-bap (reference)
-              |               |                |
-              +-------+-------+----------------+
+  Reference patterns (READ by the orchestrator before scaffolding,
+  NOT pipeline stages — they're playbooks the orchestrator consults
+  to scaffold correctly):
+
+       build-mcp-for-bap        (HTTP MCP playbook, OAuth 2.0 auto-approve)
+       build-agents-for-bap     (24 proven coworker rules)
+       build-mini-apps-for-bap  (panel + external backend pattern,
+                                 read when miniApp.needed = true)
+
+
+  Pipeline (stages, chained):
+
+              transcript-to-bap-coworker  (orchestrator)
                       |
                       v
-              bap-prior-art-scout  (Step 1.5, parallel)
-              scans workspace coworkers + past builds + vault
-              projects + FDK + personal skills for reuse anchors
+              parse-transcript-to-agent-spec
                       |
                       v
-              bap-platform-feasibility-check  (Step 1.6, parallel)
-              web research for each external platform :
-              API + tier, ToS, community MCPs, browser automation,
-              known incidents. HUMAN STOP on legally-risky / infeasible.
+              bap-prior-art-scout  (5 subagents parallel: workspace
+              coworkers + past builds + vault projects + FDK + personal
+              skills, returns reuse anchors)
                       |
                       v
-              tools resolved, custom MCPs only when no prior fits
-              AND the external platform is feasible
+              bap-platform-feasibility-check  (5 subagents web parallel:
+              API + ToS + community MCPs + browser automation + known
+              incidents. HUMAN STOP on legally-risky / infeasible)
                       |
                       v
-              bap-coworker-test-loop
+              orchestrator scaffolds (SKILL.md + render.py + /app/output.html)
+              by APPLYING the 3 reference patterns above, then runs
+              skill_add + coworker_create + coworker_update
                       |
-              every step may emit a finding
+                      v
+              bap-coworker-test-loop  (run -> log -> eval -> update, up to 5x)
+                      |
+                      v
+              @coworker live on Bap  (+ report + outputs)
+
+
+  ==== HeyBap-side feedback (any step above may emit a finding) ====
                       |
                       v
               feature-bug-complexity-classification  (classify, 3-way dispatch)
@@ -109,11 +120,11 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
        3rd consecutive same-anomaly tick: @lubin mention.
 ```
 
-- **Tool-layer** skills: `build-mcp-for-bap` (HTTP MCP), `build-agents-for-bap` (coworker rules), `build-mini-apps-for-bap` (interactive panels with external backend).
-- **Pipeline** skills: `parse-transcript-to-agent-spec` (input -> structured spec), `bap-coworker-test-loop` (deployed -> validated), `transcript-to-bap-coworker` (chains everything), `feature-bug-complexity-classification` (HeyBap-side feedback).
+- **Reference patterns** (read before scaffolding, NOT pipeline stages): `build-mcp-for-bap` (HTTP MCP playbook), `build-agents-for-bap` (24 coworker rules), `build-mini-apps-for-bap` (interactive panel + external backend pattern). The orchestrator consults these like docs to scaffold correctly.
+- **Pipeline stages**: `parse-transcript-to-agent-spec` (input -> structured spec), `bap-prior-art-scout` (reuse anchors), `bap-platform-feasibility-check` (external platform feasibility), `bap-coworker-test-loop` (deployed -> validated), `transcript-to-bap-coworker` (chains the stages and applies the patterns), `feature-bug-complexity-classification` (HeyBap-side feedback gate).
 - **Autonomous loops**: `bap-ticket-implementer` (`/loop 30m`, drains tagged Linear tickets), `bap-favorite-coworker-watchdog` (`/loop 60m`, monitors production coworkers).
 
-The three tool-layer skills cover the full development loop on their own; the pipeline skills automate the path from a raw call transcript or operator brief to a tested live coworker; the complexity-classification gate closes the feedback loop on the HeyBap platform itself; the autonomous loops run in parallel to drain the backlog and catch production drift before clients notice.
+The three reference patterns describe HOW to build a coworker correctly (MCP scaffolding, 24 rules, mini-app shape); the pipeline stages automate the path from a raw call transcript or operator brief to a tested live coworker by applying those patterns; the complexity-classification gate closes the feedback loop on the HeyBap platform itself; the autonomous loops run in parallel to drain the backlog and catch production drift before clients notice.
 
 ## How to use these in your own setup
 

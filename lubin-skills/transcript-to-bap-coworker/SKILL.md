@@ -1,19 +1,25 @@
 ---
 name: transcript-to-bap-coworker
 description: |
-  Meta-skill that turns a sales / discovery / kickoff call transcript into one
-  or several deployed and tested Bap (Heybap) coworkers, with all assets:
-  agent prompt, SKILL.md, render scripts, `/app/output.html` template with
-  interactive postMessage buttons, custom MCP server(s) when needed,
-  workspace wiring, and a closed-loop test pass. Chains
-  `parse-transcript-to-agent-spec`, `build-mcp-for-bap`, `build-agents-for-bap`,
-  and `bap-coworker-test-loop` into a single pipeline. Use when a transcript
-  arrives and the goal is "walk out of the call with the agents already live".
+  Meta-skill that turns a sales / discovery / kickoff call transcript (or a
+  free-form operator brief) into one or several deployed and tested Bap
+  (Heybap) coworkers, with all assets: agent prompt, SKILL.md, render
+  scripts, `/app/output.html` template with interactive postMessage
+  buttons, custom MCP server(s) when needed, workspace wiring, and a
+  closed-loop test pass. Pipeline stages it chains: `parse-transcript-to-
+  agent-spec`, `bap-prior-art-scout`, `bap-platform-feasibility-check`,
+  `bap-coworker-test-loop`. Reference patterns it APPLIES while
+  scaffolding (read before generation, NOT chained as separate stages):
+  `build-mcp-for-bap` (HTTP MCP playbook), `build-agents-for-bap` (coworker
+  rule set, 24 rules), `build-mini-apps-for-bap` (panel + external backend
+  pattern when `miniApp.needed = true`). Use when a transcript or brief
+  arrives and the goal is "walk out of the call with the agents already
+  live".
 ---
 
 # Transcript to deployed Bap coworker, end to end
 
-The aspiration: a call ends, the transcript hits Grain, and within a few minutes the proposed coworkers are running on Bap, tested against the success criteria the prospect actually stated. This skill is the orchestrator that makes that real. It does not do the work itself; it chains the four other skills in this folder in the right order, surfaces the unavoidable human checkpoints, and produces a single report at the end.
+The aspiration: a call ends, the transcript hits Grain, and within a few minutes the proposed coworkers are running on Bap, tested against the success criteria the prospect actually stated. This skill is the orchestrator that makes that real. It does not do the work itself; it chains the pipeline stages (parser, prior-art scout, feasibility check, test loop) in the right order, **applies the patterns from the three reference skills (`build-mcp-for-bap`, `build-agents-for-bap`, `build-mini-apps-for-bap`) when scaffolding — those are docs/playbooks consulted before generation, not separate pipeline stages** — surfaces the unavoidable human checkpoints, and produces a single report at the end.
 
 It is the top of the dependency chain. Nothing else in `lubin-skills/` calls it.
 
