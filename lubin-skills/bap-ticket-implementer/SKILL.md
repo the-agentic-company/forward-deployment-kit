@@ -144,7 +144,14 @@ git fetch origin && git checkout main && git pull
 git checkout -b <branchPrefix><n>-<short-slug>      # e.g. fix/bap-127-skill-add-race
 ```
 
-Implement the fix. Run any test from Step 4 angle 4 that touches the change site. If a test breaks unexpectedly, **stop** — do not edit the test. Post a Linear comment "Test broke unexpectedly: <test:file:line>. Implementation rolled back, escalating to operator". No commit.
+Implement the fix. Then run the full local test suite for the touched packages before staging:
+
+- if the change touches `apps/web/`: `cd apps/web && bun run test:integration`.
+- if the change touches `packages/core/`: `cd packages/core && bun run test:unit`.
+- if both: `bun run test:ci` from the repo root.
+- always run `cd apps/web && bun run typecheck` and `bun run lint` on the touched files.
+
+If a test breaks unexpectedly, **stop** — do not edit the test. Post a Linear comment "Test broke unexpectedly: <test:file:line>. Implementation rolled back, escalating to operator". No commit. Same rule for typecheck or lint failures: fix the cause, do not bypass.
 
 Commit:
 
@@ -179,6 +186,24 @@ gh pr create \
 ```
 
 Capture the PR URL.
+
+## Step 6.5 — capture the AFTER screenshot (Playwright, UI changes only)
+
+If the ticket touches UI, capture an "after" screenshot on the feature branch with Playwright (already installed in `apps/web` as `@playwright/test`). Make sure the local dev stack is up — `docker compose -f docker/compose/dev.yml up -d` + `bun run dev` from the repo root if needed — then wait for `localhost:3000`.
+
+Frame the same surface as the BEFORE screenshot already on the Linear ticket (read it from `issue.attachments` filtered on `contentType` starting with `image/`). Same viewport size, same path, so Baptiste can flip between BEFORE and AFTER directly.
+
+Save the screenshot to `~/HeyBap Pipeline/artifacts/BAP-<n>/after.png`, then upload it to Linear:
+
+```
+upload  = mcp__linear__prepare_attachment_upload({ issue: "BAP-<n>", filename: "after.png", contentType: "image/png", size: <bytes> })
+# PUT bytes to upload.uploadRequest.url with the signed headers
+mcp__linear__create_attachment_from_upload({ issue: "BAP-<n>", assetUrl: upload.assetUrl, title: "After fix" })
+```
+
+Record the returned `attachment.url` for Step 8 (Slack post) to cite.
+
+Skip for purely backend bugs.
 
 ## Step 7 — Linear comment + state transition
 
@@ -236,6 +261,34 @@ Send via `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message` (channe
 Screenshot rule: list every image attachment already on the Linear ticket (read `issue.attachments` from Step 3's `get_issue` call, filter on `contentType` starting with `image/`). If Step 4's deep research captured a fresh repro screenshot via Chrome MCP, upload it to the ticket first (`prepare_attachment_upload` + `create_attachment_from_upload`) and include the new URL too. Drop the whole `Screenshots:` line when there are zero images — do not write "Screenshots: none".
 
 One message per PR. The `<@U…>` reviewer ping is required — it is the whole point of the post. On a re-implementation (loop tick later updating the same PR), reply in the thread of the original message rather than posting a new top-level message; the thread reply does NOT need to re-ping Baptiste.
+
+## Step 8.5 — watch CI, fix red, self-merge after green
+
+Required for every PR opened or updated by this skill. The autonomous loop owns the green-up; never leave a red PR open for the operator to deal with.
+
+1. **Watch CI.** Poll `gh pr checks <num>` until every check completes. The Bap CI runs oxlint, typecheck (`tsgo`), Fallow audit (CRAP / dead-code / dupes), gitleaks, react-doctor, and `bun run test:ci` (vitest unit + integration).
+
+2. **If any check is red: fix it, do not abandon.** Read the failure log with `gh run view <id> --log-failed`, identify the root cause, fix in code on the SAME branch (do not close + reopen), commit, push, and watch again. Loop until green. Common gates and their fixes:
+   - Fallow CRAP score at or above threshold → extract a small helper to drop cyclomatic.
+   - oxlint `curly` → braces around `if` bodies.
+   - typecheck error → match the existing signature.
+   - vitest failure → the implementation is wrong; do NOT edit the test, return to Step 4 and pick a different angle.
+
+   Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate. If after 3 fix iterations the failure is genuinely architectural (e.g. requires a much larger refactor than the 120-line cap), halt the loop, post a Linear comment "CI failure not resolvable within the ticket's scope — escalating to operator", and exit. The PR stays open for the operator.
+
+3. **When CI is green, self-merge.** Operator (Lubin) is admin on the repo and `enforce_admins = false`, so the skill squash-merges its own PR:
+   ```bash
+   gh pr merge <num> --squash --delete-branch
+   ```
+   Squash is the team default. Branch deletion keeps the remote tidy.
+
+4. **After merge.** `release-main.yml` auto-deploys to STAGING on push to main. Prod release stays manual (operator triggers `prod-release.yml` from GitHub UI when they decide). Do not auto-trigger prod from this skill.
+
+5. **Reply in the Slack thread** of the Step 8 post:
+   ```
+   Merged on `main` (commit `<merge-sha-short>`). Staging deploy auto-triggered.
+   ```
+   No new @mention on the reply.
 
 ## Step 9 — return to caller / log
 

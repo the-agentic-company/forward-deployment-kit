@@ -63,20 +63,39 @@ gh repo clone the-agentic-company/bap /tmp/bap-bug-$(date +%s)
 
 The local clone is mandatory: this skill writes a fix on a branch and pushes it.
 
-## Step 2 — reproduce in the live product (Chrome MCP, when relevant)
+## Step 2 — reproduce in the live product (Playwright, when relevant)
 
-For any UI / UX / layout / interaction / visual bug, **reproduce the issue live in https://heybap.com before concluding**. Static code reading alone misses half the picture (overflow, z-index, layout collapse, hover states, transition glitches, race conditions on load).
+For any UI / UX / layout / interaction / visual bug, **reproduce the issue live and capture a "before" screenshot before concluding**. Static code reading alone misses half the picture (overflow, z-index, layout collapse, hover states, transition glitches, race conditions on load).
 
-Use the Claude-in-Chrome MCP tools (`mcp__Claude_in_Chrome__*`):
+Use Playwright (already installed in `apps/web` as `@playwright/test`). The dev stack must be up; if it is not, restart it (`docker compose -f docker/compose/dev.yml up -d` then `bun run dev` from the repo root) and wait for `localhost:3000` to respond.
 
-- `navigate` to https://heybap.com and reach the relevant route. The user's session should already be authenticated.
-- Reproduce the user's exact scenario: open the run, the coworker, the HTML output, the attachment flow, whatever the bug describes.
-- `preview_screenshot` (or `computer` action) to capture the broken state. Take 1 to 3 screenshots: one wide shot, one zoomed, one of the working baseline for comparison if relevant.
-- `read_console_messages` and `read_network_requests` to catch silent errors, 4xx/5xx, unexpected payloads.
-- Use `find` / `javascript_tool` to probe DOM state, computed styles, dataset attributes.
-- Save screenshot file paths into `evidence.screenshots` — Step 6 attaches them directly to the Linear ticket and Step 10 references them in the Slack post. Capturing the path is enough; no manual upload by the user.
+Capture the **BEFORE** screenshot on the broken state — checkout `main` (or the branch where the bug reproduces), navigate to the affected surface, take a screenshot, save it to `~/HeyBap Pipeline/artifacts/BAP-<n>/before.png`. Naming matters: Step 6 uploads this file as `before.png` to Linear; downstream skills read it from there.
 
-Skip Chrome reproduction only for purely backend / non-visual bugs. Justify the skip in one line in the ticket description.
+Minimal Playwright snippet (run from `apps/web/`):
+
+```ts
+// scripts/bug-report-capture.ts (created ad-hoc and deleted after run)
+import { chromium } from "@playwright/test"
+const url = "http://localhost:3000/agents/info/<slug>"  // path that reproduces the bug
+const out = "/Users/lubin.danilo/HeyBap Pipeline/artifacts/BAP-<n>/before.png"
+const browser = await chromium.launch()
+const ctx = await browser.newContext({ storageState: "storage-state.json" })  // pre-authed session
+const page = await ctx.newPage()
+await page.goto(url)
+await page.waitForLoadState("networkidle")
+await page.screenshot({ path: out, fullPage: true })
+await browser.close()
+```
+
+Use the existing auth fixture (`apps/web/tests/e2e/fixtures/*` or the project's `storage-state.json`) so the page lands authenticated. Capture 1 to 3 screenshots: one wide shot, one zoomed on the broken element, one of the working baseline if useful.
+
+Also probe `page.evaluate(...)`, `page.on("console", ...)`, and `page.on("requestfailed", ...)` to catch silent errors, 4xx/5xx, unexpected payloads — equivalent of Chrome MCP's `read_console_messages` and `read_network_requests`.
+
+The **AFTER** screenshot is captured in Step 7.5 once the fix is implemented.
+
+Save every screenshot path into `evidence.screenshots` and tag each one as `kind: "before" | "after" | "context"` — Step 6 attaches them directly to the Linear ticket and Step 10 references the AFTER URL in the Slack post.
+
+Skip Playwright reproduction only for purely backend / non-visual bugs. Justify the skip in one line in the ticket description.
 
 The visual evidence refines the diagnosis. It does not replace the code-level root cause.
 
@@ -301,7 +320,14 @@ Slug rules: kebab-case, ≤4 words, derived from the bug noun (e.g. `chat-column
 - If the durable fix is large (new hook, new endpoint, new component), it does NOT go in this PR. Mention it in the ticket's "Fix durable" section for follow-up.
 - For **feature requests**: if the implementation is larger than ~50 lines, open a **draft** PR with the smallest scaffold and a detailed TODO list in the body. Do not autonomously ship a 500-line feature without review.
 
-**Pre-commit regression sweep (mandatory)**: before staging the change, re-open each caller from Step 3 angle 2 and confirm the contract still holds. Then run any test file from Step 3 angle 4 that touches the change site, locally, and observe a green pass. If a test breaks unexpectedly, do not edit the test to make it pass; treat the breakage as new evidence that the fix is wrong and return to Step 4 to pick a different alternative.
+**Pre-commit regression sweep (mandatory)**: before staging the change, re-open each caller from Step 3 angle 2 and confirm the contract still holds. Then run the full local test suite for the touched packages:
+
+- if the change touches `apps/web/`: `cd apps/web && bun run test:integration` (vitest, scoped to that package).
+- if the change touches `packages/core/`: `cd packages/core && bun run test:unit`.
+- if both: `bun run test:ci` from the repo root.
+- always run `cd apps/web && bun run typecheck` and `bun run lint` (oxlint) on the touched files.
+
+Observe a green pass before staging. If a test breaks unexpectedly, do not edit the test to make it pass; treat the breakage as new evidence that the fix is wrong and return to Step 4 to pick a different alternative. If the local run is red, fix the cause; do not push and rely on CI to catch it.
 
 Commit with a Bap-style message that references the ticket:
 
@@ -312,6 +338,16 @@ Commit with a Bap-style message that references the ticket:
 ```
 
 Areas seen on the repo: `Web`, `Sandbox`, `Skills`, `Core`, `Agents`, `Chat`. Pick the most fitting.
+
+## Step 7.5 — capture the AFTER screenshot (Playwright, UI changes only)
+
+For any UI change, capture an "after" screenshot on the feature branch the same way Step 2 captured the "before". Save to `~/HeyBap Pipeline/artifacts/BAP-<n>/after.png`, frame the same surface as the before, same viewport size — Baptiste and the team need a direct before/after comparison.
+
+Run the same minimal Playwright snippet from Step 2 (different output path and the new fix already applied on disk). Make sure the local dev stack is up; if not, `docker compose -f docker/compose/dev.yml up -d` and `bun run dev` from the repo root, then wait for `localhost:3000`.
+
+Append the path to `evidence.screenshots` with `kind: "after"`. Step 9 attaches it to the Linear ticket and Step 10 cites the Linear asset URL in the Slack post.
+
+Skip for purely backend bugs.
 
 ## Step 8 — open the PR
 
@@ -361,6 +397,16 @@ Linear's GitHub integration usually attaches the PR automatically once the branc
 
 `links` is append-only, so re-running this step in a retry is safe.
 
+**Attach the AFTER screenshot** captured in Step 7.5 (UI changes only). Same flow as Step 6's BEFORE attachment:
+
+```
+upload  = mcp__linear__prepare_attachment_upload({ issue: "BAP-<n>", filename: "after.png", contentType: "image/png", size: <bytes> })
+# PUT file bytes to upload.uploadRequest.url with the signed headers
+mcp__linear__create_attachment_from_upload({ issue: "BAP-<n>", assetUrl: upload.assetUrl, title: "After fix" })
+```
+
+Record the returned `attachment.url` as the AFTER entry in `evidence.screenshotAttachments[]`. Step 10 cites it in the Slack post.
+
 ## Step 10 — Slack `#dev` notification (problem + fix + ping Baptiste for review)
 
 Required for every shipped PR. The team relies on this message — not on Linear's auto-broadcast — to know what is ready for review. Skip it and Baptiste does not learn the PR exists until he opens Linear on his own.
@@ -393,9 +439,36 @@ Constraints:
 - Both sentences (the problem statement and the new-behavior description) must read as plain product language. No file paths, no React prop names, no diff-style refs. A non-technical reader on the channel should understand what shipped without opening anything.
 - Avoid em-dashes (the team's house style).
 - The `Screenshots:` line is required whenever `evidence.screenshotAttachments` is non-empty. Drop the entire line when no screenshot was captured — do not write "Screenshots: none".
-- Capture the `permalink` returned by `slack_send_message` and include it in the Step 11 return value as `slackPermalink`.
+- Capture the `permalink` returned by `slack_send_message` and include it in the Step 12 return value as `slackPermalink`.
+- Slack: prefer the AFTER screenshot URL (the one that proves the fix lands). Include the BEFORE URL only if the contrast is what makes the message readable; otherwise keep the post tight.
 
-## Step 11 — return to the user
+## Step 11 — watch CI, fix red, self-merge after green
+
+Required for every PR opened by this skill.
+
+1. **Watch CI.** After the push, poll `gh pr checks <num>` until every check completes. The Bap CI runs oxlint, typecheck (`tsgo`), Fallow audit (CRAP / dead-code / dupes), gitleaks, react-doctor, and `bun run test:ci` (vitest unit + integration).
+
+2. **If any check is red: fix it, do not abandon.** Read the failure log with `gh run view <id> --log-failed`, identify the root cause, fix in code on the SAME branch (do not close + reopen), commit, push, and watch again. Loop until green. Common gates:
+   - Fallow CRAP score at or above threshold → extract a small helper to drop the function's cyclomatic.
+   - oxlint `curly` → braces around `if` bodies.
+   - typecheck error → match the existing signature.
+   - vitest failure → re-read Step 4, the fix is probably wrong.
+   Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate.
+
+3. **When CI is green, self-merge.** Branch protection on `main` requires a PR but `enforce_admins = false`, so the operator (admin) can squash-merge their own PR:
+   ```bash
+   gh pr merge <num> --squash --delete-branch
+   ```
+   Squash is the team default (the repo allows squash + rebase, not merge commit). Branch deletion keeps the remote tidy.
+
+4. **After merge.** `release-main.yml` auto-deploys to STAGING on push to main. The operator triggers the manual `prod-release.yml` (`gh workflow run prod-release.yml -f ref=main`) when they decide to ship. Do not auto-trigger prod from this skill.
+
+5. **Post the merge confirmation as a thread reply** on the original Slack post (Step 10):
+   ```
+   Merged on `main` (commit `<merge-sha-short>`). Staging deploy auto-triggered; prod release stays on operator demand.
+   ```
+
+## Step 12 — return to the user
 
 Output exactly three blocks, no commentary, no headers:
 
