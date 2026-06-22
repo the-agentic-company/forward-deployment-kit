@@ -1,32 +1,43 @@
 #!/usr/bin/env bash
 # build-from-transcript.sh
 #
-# Manual trigger, autonomous from there. Pass a transcript (file path, Grain URL,
-# or inline text). The script invokes `claude -p` from the FDK repo root, which
-# picks up .claude/settings.json (pre-approved tools) and runs the full pipeline:
-# parse -> resolve tools -> build MCPs if needed -> skill_add -> coworker_create
-# + update -> bap-coworker-test-loop -> emit a report.
+# Manual trigger, autonomous from there. Accepts EITHER a sales / discovery call
+# transcript OR a free-form operator brief written in the first person (file path,
+# Grain URL, or inline text). The parser auto-detects the shape. The script invokes
+# `claude -p` from the FDK repo root, which picks up .claude/settings.json
+# (pre-approved tools) and runs the full pipeline: parse -> prior-art scout ->
+# platform feasibility -> resolve tools -> build MCPs if needed -> skill_add ->
+# coworker_create + update -> bap-coworker-test-loop -> emit a report.
 #
-# Every HeyBap gap observed during the run is routed through bap-finding-router,
-# which dispatches to bap-bug-report (SIMPLE) or bap-feature-brainstorm (COMPLEX).
-# After a merge on the-agentic-company/bap, run bap-post-deploy-verify on the PR
-# (separately or via a /loop wrapper) to close the loop.
+# Every HeyBap gap observed during the run is routed through
+# feature-bug-complexity-classification, which dispatches to bap-bug-report
+# (SIMPLE) or bap-feature-brainstorm (COMPLEX). After a merge on
+# the-agentic-company/bap, run bap-post-deploy-verify on the PR (separately or
+# via a /loop wrapper) to close the loop.
 
 set -euo pipefail
 
 usage() {
   cat <<USAGE >&2
-Usage: $(basename "$0") <transcript> [prospect] [callType] [maxAgents]
+Usage: $(basename "$0") <input> [prospect] [callType] [maxAgents]
 
-  <transcript>   Path to a file, a Grain URL, or "-" to read from stdin.
-  [prospect]     Optional prospect name (improves the agentSpec).
-  [callType]     discovery | kickoff | follow-up | technical | demo (default: discovery)
+  <input>        Path to a file, a Grain URL, or "-" to read from stdin.
+                 Content can be a transcript (multi-speaker) or an operator
+                 brief (first-person spec). Auto-detected.
+  [prospect]     Optional prospect or client name (improves the agentSpec).
+  [callType]     discovery | kickoff | follow-up | technical | demo | brief
+                 (default: discovery when transcript shape, brief when brief shape)
   [maxAgents]    Cap agents built (default: 3)
+
+Options via env:
+  FDK_INPUT_MODE=auto|transcript|brief   Force the input shape (default: auto)
 
 Examples:
   $(basename "$0") /tmp/grain-export.txt "Concentrix" discovery
   $(basename "$0") "https://grain.com/share/abc" "Eden Red"
   $(basename "$0") - "Acme" < /tmp/transcript.txt
+  $(basename "$0") /tmp/brief-agent-immo.txt "Foncia" brief
+  echo "Je veux un coworker qui ..." | $(basename "$0") - "" brief
 USAGE
   exit 1
 }
@@ -37,6 +48,7 @@ TRANSCRIPT_INPUT="$1"
 PROSPECT="${2:-}"
 CALL_TYPE="${3:-discovery}"
 MAX_AGENTS="${4:-3}"
+INPUT_MODE="${FDK_INPUT_MODE:-auto}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_TS="$(date +%Y%m%d-%H%M%S)"
@@ -81,19 +93,23 @@ CONTEXT_JSON=$(jq -n \
   '{prospect: $prospect, callType: $callType} | with_entries(select(.value != ""))')
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting FDK pipeline" | tee -a "$LOG"
-echo "  Transcript : $TRANSCRIPT_REF"                       | tee -a "$LOG"
+echo "  Input      : $TRANSCRIPT_REF"                       | tee -a "$LOG"
+echo "  Input mode : $INPUT_MODE"                           | tee -a "$LOG"
 echo "  Context    : $CONTEXT_JSON"                         | tee -a "$LOG"
 echo "  Max agents : $MAX_AGENTS"                           | tee -a "$LOG"
 echo "  Log file   : $LOG"                                  | tee -a "$LOG"
 echo ""                                                      | tee -a "$LOG"
 
 PROMPT=$(cat <<EOF
-You are running the FDK autonomous pipeline. The user manually triggered this with a transcript; you are autonomous from now until the report.
+You are running the FDK autonomous pipeline. The user manually triggered this with an input (a sales / discovery call transcript OR a free-form operator brief written in first person). You are autonomous from now until the report.
 
 Invoke the skill \`transcript-to-bap-coworker\` with:
-  transcript: $TRANSCRIPT_REF
+  input: $TRANSCRIPT_REF
+  inputMode: "$INPUT_MODE"
   context: $CONTEXT_JSON
   options: { maxAgents: $MAX_AGENTS, testEnvPath: "$REPO_ROOT/test_env.yaml", skillFolderRoot: "$SKILL_FOLDER_ROOT", handoffChannel: "#agents-builds" }
+
+When inputMode is "auto" (default), \`parse-transcript-to-agent-spec\` auto-detects the shape: multi-speaker dialogue or Grain URL is treated as transcript; first-person operator voice without speaker labels is treated as brief. Brief mode skips the prospect-interpretation guesswork; the operator is the author.
 
 Run the full pipeline end-to-end without asking for confirmation:
 1. parse-transcript-to-agent-spec
@@ -104,7 +120,7 @@ Run the full pipeline end-to-end without asking for confirmation:
 6. bap-coworker-test-loop on each coworker with stopOnFirstHumanCheckpoint=false. Panel E2E phase-2 tests get queued as HUMAN STOPs in the report.
 7. Emit the final consolidated Markdown report to /tmp/agent-builds/<callId>/report.md
 
-For every HeyBap gap observed during the run, invoke \`bap-finding-router\` exactly once per finding. Do not invoke \`bap-bug-report\` or \`bap-feature-brainstorm\` directly; the router classifies and dispatches.
+For every HeyBap gap observed during the run, invoke \`feature-bug-complexity-classification\` exactly once per finding. Do not invoke \`bap-bug-report\` or \`bap-feature-brainstorm\` directly; the router classifies and dispatches.
 
 Do not stop to ask for permission on any tool call. The .claude/settings.json in this repo pre-approves every tool the pipeline needs.
 

@@ -6,7 +6,7 @@ description: |
   the original finding (the one that triggered the PR) is actually fixed
   in prod, then **transitions the linked Linear ticket (team `Bap`) to
   `Live`** with a verification comment. On regression, opens a new Linear
-  ticket via `bap-finding-router` (labelled `Regression`, linked back via
+  ticket via `feature-bug-complexity-classification` (labelled `Regression`, linked back via
   `relatedTo`). Three verification modes, chosen per finding: Mode A
   (re-run the affected coworker via `mcp__bap__coworker_run`, diff the
   logs), Mode B (drive heybap.com via the Claude-in-Chrome MCP, reproduce
@@ -18,7 +18,7 @@ description: |
 
 # Post-deploy verification for `the-agentic-company/bap`
 
-The loop that `bap-finding-router` and `bap-bug-report` start has, until now, ended at "PR opened + Linear ticket at `In Review`". This skill closes it. After a merge, it goes back into HeyBap (or the bap code paths) and confirms that the original finding is actually gone in prod, then transitions the Linear ticket to `Live` (a completed-type status meaning "shipped and verified").
+The loop that `feature-bug-complexity-classification` and `bap-bug-report` start has, until now, ended at "PR opened + Linear ticket at `In Review`". This skill closes it. After a merge, it goes back into HeyBap (or the bap code paths) and confirms that the original finding is actually gone in prod, then transitions the Linear ticket to `Live` (a completed-type status meaning "shipped and verified").
 
 Without this skill the pipeline ships PRs blind. With it, every PR is paired with a verification step whose verdict is recorded on the Linear ticket, and regressions create a new ticket automatically.
 
@@ -219,7 +219,7 @@ Possible verdicts and actions:
 | Verdict | Linear actions | GitHub actions |
 |---------|----------------|----------------|
 | `verified` | Comment on the ticket with the verification details (mode used, new run id or screenshot paths, Playwright report path). Then transition the ticket to `Live` (`mcp__linear__save_issue({ id: "BAP-<n>", state: "<live_status_id>" })`). | Comment on the PR (`gh pr comment <num> --body "..."`) summarising the verification. Add label `post-deploy-verified` to the PR for idempotency. |
-| `regression` | Invoke `bap-finding-router` with `kind: "bug"`, title `(Regression) merge of BAP-<n>: <original description>`, evidence including new logs / screenshots / Playwright report. The router dispatches to `bap-bug-report` (or `bap-feature-brainstorm` if the regression is structural), which creates a new Linear ticket. Then comment on the original ticket: `Regression detected: see BAP-<new>` and leave its status as `Live` if it was already there, otherwise as `In Review`. The new ticket is linked via `relatedTo` automatically by passing it in the `save_issue` call. | Label the PR `post-deploy-regression`. Comment on the PR with a link to the new Linear ticket. |
+| `regression` | Invoke `feature-bug-complexity-classification` with `kind: "bug"`, title `(Regression) merge of BAP-<n>: <original description>`, evidence including new logs / screenshots / Playwright report. The router dispatches to `bap-bug-report` (or `bap-feature-brainstorm` if the regression is structural), which creates a new Linear ticket. Then comment on the original ticket: `Regression detected: see BAP-<new>` and leave its status as `Live` if it was already there, otherwise as `In Review`. The new ticket is linked via `relatedTo` automatically by passing it in the `save_issue` call. | Label the PR `post-deploy-regression`. Comment on the PR with a link to the new Linear ticket. |
 | `no-finding-context` | No-op. | Stop. Notify the operator (return-to-user) that neither the input, the Linear ticket description, nor the PR body carries the FINDING_CONTEXT block. Suggest re-opening the PR via `bap-bug-report` with the context, or invoking this skill with the context inline. |
 | `deploy-pending` | Comment on the ticket: `Deploy pending after 10 min, retrying in 60 min.` Schedule a re-invocation (`/loop` pattern, see "Autonomous mode" below). | No-op. |
 | `not-merged` | No-op. | Stop. Return-to-user: PR is not merged. |
@@ -338,7 +338,7 @@ loop:
   pr_label_flake: "post-deploy-flake"
 ```
 
-Keep the Linear ids in sync with `lubin-skills/bap-finding-router/config.yaml` (canonical source).
+Keep the Linear ids in sync with `lubin-skills/feature-bug-complexity-classification/config.yaml` (canonical source).
 
 ## Anti-patterns
 
@@ -346,14 +346,14 @@ Keep the Linear ids in sync with `lubin-skills/bap-finding-router/config.yaml` (
 - Generating a fresh Playwright spec every time for the same finding. The point of Mode C is the spec becomes a permanent CI artefact; if it already exists, run it, do not regenerate.
 - Closing a finding on a `flake` verdict. Flakes are not validation; surface them, never silently treat them as pass.
 - Trusting `gh pr view` for deploy status. Merge != deploy. Always check the deploy signal explicitly (Step 1).
-- Posting a regression to Slack without also opening a Linear ticket via `bap-finding-router`. The Linear ticket is the unit of work; Slack is a notification surface Linear drives on its own.
+- Posting a regression to Slack without also opening a Linear ticket via `feature-bug-complexity-classification`. The Linear ticket is the unit of work; Slack is a notification surface Linear drives on its own.
 - Transitioning the ticket to `Live` before the verification actually passed. `Live` is reserved for verified-in-prod.
 - Running this skill on a PR that was not opened by `bap-bug-report` and that has no manually-supplied finding context. The skill is not a generic E2E test runner; without a finding to verify against, the output is noise.
 - Letting Playwright auth state expire silently. The skill should fail loud (`verdict: "playwright-auth-expired"`) and ask the operator to re-run `playwright codegen`.
 
 ## See also
 
-- [bap-finding-router](../bap-finding-router/SKILL.md): receives `regression` findings from this skill.
+- [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md): receives `regression` findings from this skill.
 - [bap-bug-report](../bap-bug-report/SKILL.md): creates the Linear tickets this skill verifies. Must embed `<!-- FINDING_CONTEXT ... -->` in the ticket description (Step 6 of its flow) for context to flow.
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): the eval engine for Mode A reuses its `successCriteria` interpreter.
 - [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md): the orchestrator that originally surfaced the findings being verified here.

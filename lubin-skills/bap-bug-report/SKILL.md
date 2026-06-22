@@ -406,10 +406,10 @@ github_repo: "the-agentic-company/bap"
 dedup_window_days: 60
 ```
 
-Keep this in sync with `lubin-skills/bap-finding-router/config.yaml`. The router is the canonical source.
+Keep this in sync with `lubin-skills/feature-bug-complexity-classification/config.yaml`. The router is the canonical source.
 
 ## See also
 
-- [bap-finding-router](../bap-finding-router/SKILL.md): the gate that dispatches SIMPLE findings to this skill.
+- [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md): the gate that dispatches SIMPLE findings to this skill.
 - [bap-feature-brainstorm](../../.claude/skills/bap-feature-brainstorm/SKILL.md): the COMPLEX counterpart that creates a Linear ticket at status `Triage` with `Need More Shaping` instead of a PR.
 - [bap-post-deploy-verify](../bap-post-deploy-verify/SKILL.md): closes the loop by transitioning this ticket to `Live` after the merge + deploy is verified in prod.

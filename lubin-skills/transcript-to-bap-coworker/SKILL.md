@@ -22,13 +22,14 @@ It is the top of the dependency chain. Nothing else in `lubin-skills/` calls it.
 - A transcript is dropped in chat with intent to "monte les agents", "agentifie ce call", "fais tourner le pipeline complet".
 - A Grain URL is shared with "voici, sors-moi les coworkers".
 - A `.txt` / `.md` transcript file is attached without other instructions and a `parse-transcript-to-agent-spec` JSON is desired downstream.
-- The `agent-builder` coworker on Bap fires (if you set up the scheduled poll: `mcp__bap__coworker_update` with `schedule: { type: "interval", intervalMinutes: 30 }` and a prompt that calls this skill on each new Grain transcript).
+- **A free-form operator brief** is dropped in `~/HeyBap Pipeline/inbox/` or pasted in chat, e.g. "monte-moi un coworker qui [...] quand [...]", "j'ai besoin d'un agent pour [tâche]". The parser auto-detects the brief shape (first-person voice, no speaker labels) and runs the brief-extraction path.
+- The `agent-builder` coworker on Bap fires (if you set up the scheduled poll: `mcp__bap__coworker_update` with `schedule: { type: "interval", intervalMinutes: 30 }` and a prompt that calls this skill on each new Grain transcript or each new brief in inbox).
 
 Do not invoke when:
 
-- The user asked only for parsing the transcript (no deployment). Use [parse-transcript-to-agent-spec](../parse-transcript-to-agent-spec/SKILL.md) directly.
+- The user asked only for parsing the input (no deployment). Use [parse-transcript-to-agent-spec](../parse-transcript-to-agent-spec/SKILL.md) directly.
 - The user wants to update an existing coworker, not build a new one. Update path goes through [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md) directly.
-- The transcript covers a single read-only workflow ("summarise X") with no repeatable structure. A skill suffices, no coworker needed.
+- The input covers a single read-only workflow ("summarise X") with no repeatable structure. A skill suffices, no coworker needed.
 
 ## Pipeline overview
 
@@ -79,7 +80,8 @@ Do not invoke when:
 
 ```json
 {
-  "transcript": "<text or path or Grain URL>",
+  "input": "<text or path or Grain URL>",
+  "inputMode": "auto | transcript | brief",
   "context": { /* same as parse-transcript-to-agent-spec.context */ },
   "options": {
     "maxAgents": 3,
@@ -93,20 +95,25 @@ Do not invoke when:
 }
 ```
 
+The legacy field `transcript` is still accepted as an alias for `input` so prior callers keep working. The orchestrator forwards `inputMode` to `parse-transcript-to-agent-spec`; when `auto` (default) the parser detects the shape (multi-speaker dialogue / Grain URL → transcript ; first-person operator voice without speaker labels → brief).
+
 `dryRun: true` produces all assets locally (skill folder, MCP scaffold, coworker config JSON) without calling any `mcp__bap__*` tool. Use to review before deploying.
 
 `maxAgents` caps how many agents are actually built this run. Lower-ranked agents past the cap are emitted in the report as `notBuilt` with their spec, so a human can revisit later.
 
-## Step 1. Parse the transcript
+## Step 1. Parse the input (transcript or brief)
 
 ```
 spec = invoke parse-transcript-to-agent-spec
-  transcript: input.transcript
+  input: input.input              // or input.transcript for backward compat
+  inputMode: input.inputMode      // "auto" | "transcript" | "brief"; default "auto"
   context: input.context
   options: { maxAgents: input.options.maxAgents, language: "fr" }
 ```
 
-Persist `spec` to `${skillFolderRoot}/<callId>/agent-spec.json` where `<callId>` is a stable hash of the transcript + call date. The downstream steps and the final report reference this file.
+The parser auto-detects the shape when `inputMode == "auto"`: multi-speaker dialogue or Grain URL → transcript ; first-person operator voice without speaker labels → brief. Brief mode produces a spec with higher per-agent confidence (the operator wrote what they want) and fewer ambiguities.
+
+Persist `spec` to `${skillFolderRoot}/<callId>/agent-spec.json` where `<callId>` is a stable hash of (input content + call date). The downstream steps and the final report reference this file.
 
 Validate before continuing:
 
@@ -547,7 +554,7 @@ ${noPriorArt ? "**First build of this shape; no prior anchor reused.**" : ""}
   PR: ${prUrl}                       (only when SIMPLE; absent for COMPLEX brainstorms)
 ```
 
-This is the artefact a human reviews. Everything in the pipeline is auditable from this report. The "HeyBap findings dispatched" section consolidates the `bap-finding-router` return values from every pipeline step; each entry maps one-to-one with a Linear ticket in team `Bap`.
+This is the artefact a human reviews. Everything in the pipeline is auditable from this report. The "HeyBap findings dispatched" section consolidates the `feature-bug-complexity-classification` return values from every pipeline step; each entry maps one-to-one with a Linear ticket in team `Bap`.
 
 ## Resume after human action
 
@@ -621,7 +628,7 @@ Both patterns can run in parallel safely if they share the `${skillFolderRoot}/s
 
 ## Report HeyBap bugs and feature gaps (mandatory, all steps)
 
-The orchestrator is the only place in the pipeline that touches HeyBap at every level: spec extraction, MCP scaffolding and binding, skill upload, coworker creation, run / log / update, panel rendering, report persistence. You see the whole stack misbehave or fail to expose a needed capability. Surface every finding through [bap-finding-router](../bap-finding-router/SKILL.md). The router classifies (SIMPLE vs COMPLEX) and dispatches to `bap-bug-report` (opens a PR on `the-agentic-company/bap` and creates a Linear ticket in team `Bap` at status `In Review` linked to the PR) or `bap-feature-brainstorm` (creates a Linear ticket in team `Bap` at status `Triage` with label `Need More Shaping` carrying the 3-options problem statement). Linear's own integrations notify the team; no direct Slack post.
+The orchestrator is the only place in the pipeline that touches HeyBap at every level: spec extraction, MCP scaffolding and binding, skill upload, coworker creation, run / log / update, panel rendering, report persistence. You see the whole stack misbehave or fail to expose a needed capability. Surface every finding through [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md). The router classifies (SIMPLE vs COMPLEX) and dispatches to `bap-bug-report` (opens a PR on `the-agentic-company/bap` and creates a Linear ticket in team `Bap` at status `In Review` linked to the PR) or `bap-feature-brainstorm` (creates a Linear ticket in team `Bap` at status `Triage` with label `Need More Shaping` carrying the 3-options problem statement). Linear's own integrations notify the team; no direct Slack post.
 
 One finding equals one invocation. A one-line description is enough; the router and its downstream skills do the deep investigation themselves. Do not invoke the leaf skills directly; do not batch findings; do not wait until "the end of the pipeline"; do not silently route around. Baptiste asked explicitly for tight feedback in the 2026-06-18 daily sync, and the orchestrator is the most concentrated source of HeyBap signal that exists.
 
@@ -645,4 +652,4 @@ If at any step you find yourself writing a comment like "TODO: HeyBap should sup
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): step 6 of this pipeline.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): the rule set the generated coworker must follow. Cited inline throughout (rules #1, #2, #4, #6, #8, #10, #15, #16, #18, #19).
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): called in step 2b when a custom MCP is needed.
-- [bap-finding-router](../bap-finding-router/SKILL.md): invoke at every step where the platform falls short (see the section above).
+- [feature-bug-complexity-classification](../feature-bug-complexity-classification/SKILL.md): invoke at every step where the platform falls short (see the section above).
