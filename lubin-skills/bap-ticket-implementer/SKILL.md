@@ -239,32 +239,48 @@ This runs whether the ticket was at `Triage`, `In Progress`, or `In Review` (the
 
 ## Step 8 — Slack `#dev` notification (problem + fix + ping Baptiste for review)
 
-Post a structured message in `#dev` summarising what just shipped and ask Baptiste to review.
+**This step is MANDATORY**. Without the Slack post, Baptiste doesn't learn the PR exists; the autonomous loop is NOT done at "PR opened + Linear updated" — it is done at "Slack #dev post permalink captured".
 
 Resolve identifiers:
 
-- channel id from `config.yaml` (`slack.dev_channel_id`); fall back to `slack_search_channels({ query: "dev" })` if the placeholder is still in place.
-- reviewer id from `config.yaml` (`slack.review_user_id`); fall back to `slack_search_users({ query: "Baptiste" })` if missing.
+- channel id from `config.yaml` (`slack.dev_channel_id` = `C0AH3JU73E0` = `#dev`); fall back to `slack_search_channels({ query: "dev" })` only if the placeholder is still in place.
+- reviewer id from `config.yaml` (`slack.review_user_id` = `U0A87JNV8QP` = Baptiste); fall back to `slack_search_users({ query: "Baptiste" })` only if missing.
 
-Body template (Slack mrkdwn):
+Body template (Slack mrkdwn). The first line is the call to action: a Baptiste ping followed by the PR URL. The second line is the italic PR title. Lines 3-4 describe the problem and the fix with `file:line` refs.
 
 ```
-I fixed <user-visible problem in one short sentence — pull from the ticket's "Problem" / "Symptôme" section, restate in plain product language; do NOT paste the raw ticket sentence>.
-
-<one or two sentences describing the new behavior from the user's POV — what they will see now; no file names, no prop names, no diff size>.
-
-PR: <PR URL> (commit `<sha-short>`, <lines> lines, <files-touched> files)
-Screenshots: <attachment.url #1> · <attachment.url #2>    ← only if the ticket already has image attachments OR Step 4's research pass captured a new repro; one URL per screenshot
-<@<reviewer-id>> ready for your review. Post-deploy verification will run after merge.
+<@<reviewer-id>> <PR URL>
+_<PR title without the BAP-<n> prefix>_
+<problème en 1-2 phrases, langue produit, tiré du ticket>
+<fix en 1-2 phrases avec file:line touché>. Ticket : BAP-<n>.
 ```
 
-Start with `I fixed ...` — declarative, no emoji prefix, no ticket identifier in the opener (the PR URL carries it). Do not include a separate `Linear:` link line.
+Mandatory call sequence:
 
-Send via `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message` (channel_id from config).
+```
+result = mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message({
+  channel_id: "<config.slack.dev_channel_id>",
+  text: "<composed body above>"
+})
+if result.ok != true OR result.permalink is null:
+  # retry once (transient API errors are common)
+  result = mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message({ channel_id, text })
+if result.ok != true OR result.permalink is null:
+  # do NOT pretend success; surface the error in Step 9's verdict
+  slackPostFailed = true
+  slackPostError  = result.error or "no permalink returned"
+else:
+  slackPermalink = result.permalink
+```
 
-Screenshot rule: list every image attachment already on the Linear ticket (read `issue.attachments` from Step 3's `get_issue` call, filter on `contentType` starting with `image/`). If Step 4's deep research captured a fresh repro screenshot via Chrome MCP, upload it to the ticket first (`prepare_attachment_upload` + `create_attachment_from_upload`) and include the new URL too. Drop the whole `Screenshots:` line when there are zero images — do not write "Screenshots: none".
+Constraints:
 
-One message per PR. The `<@U…>` reviewer ping is required — it is the whole point of the post. On a re-implementation (loop tick later updating the same PR), reply in the thread of the original message rather than posting a new top-level message; the thread reply does NOT need to re-ping Baptiste.
+- Exactly one message per PR (top-level, no thread reply). On a re-implementation tick that updates an existing PR, detect the prior message via `slack_search_public({ query: "<PR URL>", limit: 5 })`; if found, reply in its thread WITHOUT re-pinging Baptiste; if not found, post a fresh top-level message.
+- The `<@U…>` ping must be the first character of the post; otherwise Baptiste's Slack does not notify.
+- The PR URL on line 1 is the call to action. The italic PR title on line 2 signals "PR is open, just review the diff."
+- No `I fixed …` opener. No `Linear:` link line. The ticket reference at the end (`Ticket : BAP-<n>`) is enough.
+- Both descriptive sentences (problem + fix) carry `file:line` references for the bridge between the PR diff and the symptom.
+- The `Screenshots:` line is optional. Add it as a fifth line only when the Linear ticket already has image attachments (`Screenshots : <url1> · <url2>`).
 
 ## Step 8.5 — watch CI, fix red until green
 
@@ -294,7 +310,9 @@ Structured return:
   "ticketRef": "BAP-<n>",
   "prUrl": "...",
   "commitSha": "...",
-  "slackPermalink": "...",
+  "slackPermalink": "...",         // null when slackPostFailed is true
+  "slackPostFailed": false,        // true when Step 8's retry also failed; never silently null both
+  "slackPostError": null,          // error message when slackPostFailed; null otherwise
   "linesChanged": 42,
   "filesChanged": 2,
   "researchAdaptation": "<one sentence or null>",
@@ -302,7 +320,7 @@ Structured return:
 }
 ```
 
-When called from `/loop`, append the return value to a JSONL log at `~/HeyBap Pipeline/logs/ticket-implementer.jsonl` for audit and the dashboard's Skills tab.
+When called from `/loop`, append the return value to a JSONL log at `~/HeyBap Pipeline/logs/ticket-implementer.jsonl` for audit and the dashboard's Skills tab. The dashboard surfaces `slackPostFailed: true` as a red badge on the run row so the operator reposts manually.
 
 ## Autonomous mode (`/loop`)
 

@@ -386,6 +386,8 @@ Record the returned `attachment.url` as the AFTER entry in `evidence.screenshotA
 
 ## Step 10 — Slack `#dev` notification (problem + fix + ping Baptiste for review)
 
+**This step is MANDATORY**. Without the Slack post, Baptiste doesn't learn the PR exists and the contract is not fulfilled. The skill is NOT done at "PR opened + Linear updated" — it is done at "Slack #dev post permalink captured".
+
 Required for every shipped PR. The team relies on this message — not on Linear's auto-broadcast — to know what is ready for review. Skip it and Baptiste does not learn the PR exists until he opens Linear on his own.
 
 Resolve identifiers:
@@ -393,31 +395,57 @@ Resolve identifiers:
 - channel id from `config.yaml` (`slack.dev_channel_id`); if it is the placeholder, fall back to `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_search_channels({ query: "dev" })` and cache for the session.
 - reviewer id from `config.yaml` (`slack.review_user_id`); if missing, fall back to `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_search_users({ query: "Baptiste" })`.
 
-Body template (Slack mrkdwn):
+Body template (Slack mrkdwn). The first line is the call to action: a Baptiste ping followed by the PR URL. The second line is the italic PR title (signals "code already written, just review the diff"). Lines 3-4 describe the problem and the fix with `file:line` refs so Baptiste has the bridge between the symptom and the diff he is about to read.
 
 ```
-I fixed <user-visible problem in one short sentence — what was observed in the product, not what's in the code; understandable to a non-technical reader>.
+<@<reviewer-id>> <PR URL>
+_<PR title without the BAP-<n> prefix>_
+<problème en 1-2 phrases, langue produit>
+<fix en 1-2 phrases avec file:line touché>. Ticket : BAP-<n>.
+```
 
-<one or two sentences describing the new behavior from the user's POV — what they will see now; compare to the broken state only if it sharpens the contrast; no file names, no prop names, no diff size>.
+Concrete example (from Lubin's reference style):
 
-PR: <PR URL> (commit `<sha-short>`, <lines> lines, <files-touched> files)
-Screenshots: <attachment.url #1> · <attachment.url #2>    ← only if evidence.screenshotAttachments is non-empty; one URL per screenshot; Slack auto-unfurls Linear asset URLs
-<@<reviewer-id>> ready for your review.
+```
+<@U0A87JNV8QP> https://github.com/the-agentic-company/bap/pull/51
+_Web: land on coworker list after workspace switch_
+Switching workspace from the sidebar dropdown (or from workspace settings) currently bounces the user to the public landing at /. For an established user toggling between workspaces, the expected destination is the coworker list.
+Two-line change: navigate({ to: "/" }) to navigate({ to: "/agents" }) in app-sidebar.tsx:478 and settings/workspace.tsx:152. Ticket : BAP-50.
 ```
 
 Send via `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message` (channel_id from config).
 
+Mandatory call sequence:
+
+```
+result = mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message({
+  channel_id: "<config.slack.dev_channel_id>",
+  text: "<composed body above>"
+})
+if result.ok != true OR result.permalink is null:
+  # retry once with the same payload (transient API errors are common)
+  result = mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message({ channel_id, text })
+if result.ok != true OR result.permalink is null:
+  # do NOT pretend success; surface the error in Step 12's return
+  slackPostFailed = true
+  slackPostError  = result.error or "no permalink returned"
+else:
+  slackPermalink = result.permalink
+```
+
+The return value (Step 12) must carry either `slackPermalink` OR `slackPostFailed: true` with the error. Never both null. Silently skipping the Slack post is a contract violation; the operator relies on this message to know what to merge.
+
 Constraints:
 
-- Exactly one message per PR. Do not re-post on PR updates; reply in the same thread instead.
-- The reviewer ping (`<@U…>`) is required — it is the whole point of the message; remove it and the notification is silent.
-- Start with `I fixed ...` — declarative, no emoji prefix, no ticket identifier. The ticket identifier is in the PR URL and the linked attachment; leading with it adds noise for non-tech readers.
-- Do not include a `Linear:` link line. The PR is the actionable surface; the Linear ticket is auto-linked from the PR description.
-- Both sentences (the problem statement and the new-behavior description) must read as plain product language. No file paths, no React prop names, no diff-style refs. A non-technical reader on the channel should understand what shipped without opening anything.
-- Avoid em-dashes (the team's house style).
-- The `Screenshots:` line is required whenever `evidence.screenshotAttachments` is non-empty. Drop the entire line when no screenshot was captured — do not write "Screenshots: none".
-- Capture the `permalink` returned by `slack_send_message` and include it in the Step 12 return value as `slackPermalink`.
-- Slack: prefer the AFTER screenshot URL (the one that proves the fix lands). Include the BEFORE URL only if the contrast is what makes the message readable; otherwise keep the post tight.
+- Exactly one message per PR (top-level, no thread reply). On a re-run, the skill detects the existing message via `slack_search_public({ query: "<PR URL>", limit: 5 })` and skips reposting; thread updates do not re-ping Baptiste.
+- The reviewer ping (`<@U…>`) is required and must be the first character of the post — it is the whole point of the message; remove it and Baptiste's Slack does not notify.
+- The PR URL on line 1 is the call to action. The italic PR title on line 2 signals "PR is open, just review the diff."
+- No `I fixed …` opener anymore; the ping + URL on line 1 carry the action.
+- No `Linear:` link line. The ticket reference at the end (`Ticket : BAP-<n>`) is enough; Linear auto-links bare identifiers.
+- Both descriptive sentences (problem + fix) carry `file:line` references for the bridge between the PR diff and the symptom.
+- Avoid em-dashes (team house style).
+- The `Screenshots:` line is optional. Add it as a fifth line only when `evidence.screenshotAttachments` is non-empty (`Screenshots : <url1> · <url2>`).
+- The Slack channel id `C0AH3JU73E0` (`#dev`) and the reviewer user id `U0A87JNV8QP` (Baptiste) are pinned in config. Resolve via `slack_search_channels` / `slack_search_users` only if the config placeholder is unchanged; otherwise use the configured ids directly.
 
 ## Step 11 — watch CI, fix red until green
 
@@ -442,9 +470,11 @@ Output exactly three blocks, no commentary, no headers:
 
 1. The Linear ticket: `BAP-<n>  <ticket URL>`.
 2. The PR URL.
-3. The Slack permalink from Step 10.
+3. The Slack permalink from Step 10, **or** `SLACK POST FAILED: <error>` if Step 10's retry also failed. Never silently omit this block.
 
 Screenshots are already attached to the Linear ticket and referenced in the Slack post (Step 6 + Step 10) — no manual upload to mention to the user.
+
+If `slackPostFailed: true`, the operator must repost manually before the PR can be considered handed off. The skill flags this loudly rather than pretending the run succeeded.
 
 ## Historical bugs (anchors)
 
