@@ -23,10 +23,9 @@ description: |
   **Do not invoke directly.** This skill is a leaf of the Phase 2 dispatch.
   Route through `feature-bug-complexity-classification` (or the `/phase-2`
   slash command, or `scripts/submit-finding.sh`). Direct invocation skips
-  the dedup pass (60-day Linear search, open-PR scan) and the
-  classification grid (SIMPLE vs COMPLEX-SCOPED vs COMPLEX-FUZZY), which
-  silently produces duplicate tickets and wrong routing. The only exception
-  is an explicit operator override.
+  the classification grid (SIMPLE vs COMPLEX-SCOPED vs COMPLEX-FUZZY),
+  which silently produces wrong routing. The only exception is an
+  explicit operator override.
 ---
 
 # Bap bug / feature → PR + Linear ticket
@@ -175,36 +174,6 @@ Produce:
 - **Implications**: which other surfaces / hooks / constants get touched, migration concerns, data impact.
 - **Regression risk**: for each caller from Step 3 angle 2, one line stating "no change to contract" or "contract changes in this way; mitigated by …". If any caller is *not* covered by an existing test, flag it as `test gap`.
 
-## Step 5 — dedup check (mandatory, before any side effect)
-
-Two checks, both required. The router may have done a first pass, but redo them here with the post-investigation knowledge.
-
-**a) Linear `Bap` team** for an open ticket on the same root cause (60-day window):
-
-```
-mcp__linear__list_issues({
-  team: "BAP",
-  query: "<distinctive token, e.g. file path or symbol>",
-  createdAt: "-P60D",
-  limit: 50,
-  includeArchived: false
-})
-```
-
-Run 2 or 3 queries with different tokens. Ignore tickets in status `Canceled` or `Duplicate`. If a clear duplicate exists, **stop here**: do not open a PR, do not create a new ticket. Return to the caller with `Already covered by: BAP-<n> <ticket URL>` and the draft you would have shipped, so the user can comment on the existing ticket.
-
-**b) Open PRs on the bap repo** touching the same files or symptom:
-
-```bash
-gh pr list --state open --search "<keyword>" --json number,title,headRefName,url
-```
-
-Run with 2-3 keyword variants (file path, symbol name, symptom noun). If a clear duplicate PR exists, check whether it already has a `BAP-` identifier in its title; if yes, **stop** and return that identifier + PR URL. If no, the next step will create the Linear ticket and you should comment on the existing PR with the new ticket identifier instead of opening a second PR.
-
-Borderline (one shared keyword, different root cause) → continue; mention the related ticket / PR in the new ticket description.
-
-Never silently skip. Never create a duplicate.
-
 ## Step 6 — create the Linear ticket
 
 The ticket is created **before** the branch and PR so its identifier can be embedded in branch name + PR title and Linear's GitHub integration auto-attaches the PR.
@@ -225,40 +194,13 @@ mcp__linear__save_issue({
 })
 ```
 
-**Ticket body template** (markdown, French ok since the team is French):
+**Ticket body template** (markdown, French ok since the team is French). The ticket is a **status card**, not a report: Baptiste must see in one glance what was broken, what was fixed, and what to do next. All the deep-research artifacts (cause racine, alternatives, callers, tests, régression) belong in the PR body (Step 8), not here.
 
 ```markdown
-## Symptôme
-<une ligne : ce que voit l'utilisateur>
+**Status : PR ouverte, à review + merge par Baptiste.**
 
-## Cause racine
-<2-4 lignes, ancrées sur file:line, chaîne symptôme → cause issue de Step 3 angle 1>
-
-## Fix proposé (quick)
-<le diff de la PR, file:line touché>
-<référencer le pattern adjacent réutilisé (Step 3 angle 3) si applicable>
-
-## Fix durable (suivi, pas dans cette PR)
-<la propriété structurelle que le fix devrait avoir>
-
-## Alternatives considérées (3 max)
-- <option 1> : <trade-off + raison de ne pas l'avoir choisie>
-- <option 2> : <trade-off + raison>
-- <option 3 (si applicable)> : <trade-off + raison>
-
-## Callers vérifiés (regression check)
-<liste des callers identifiés Step 3 angle 2, un par ligne : "<file:line> : contrat préservé" ou "<file:line> : contrat modifié, mitigation = …">
-
-## Tests existants dans la zone
-<liste des tests issues Step 3 angle 4, un par ligne : "<test:line> : verrouille <behaviour>">
-Si aucun test : "test gap : <surface non couverte>"
-
-## Repro
-<une ligne : où cliquer dans https://heybap.com>
-Screenshots : voir pièces jointes du ticket (uploadées automatiquement par le skill, voir étape ci-dessous)
-
-## Régression connue
-<commit hash + subject si trouvé via Step 3 angle 5, sinon "non identifié">
+**Symptôme** : <une ligne en langue produit, ce que voit l'utilisateur>
+**Fix** : <une ligne + file:line touché>
 
 <!-- FINDING_CONTEXT
 {
@@ -358,6 +300,8 @@ Skip for purely backend bugs.
 
 ## Step 8 — open the PR
 
+The PR body carries **all the deep-research artefacts**: cause racine, alternatives, callers, tests, régression. The Linear ticket stays short (Step 6 is a status card); the PR is where Baptiste reviews the code and the context together.
+
 ```bash
 git push -u origin <branch>
 gh pr create \
@@ -366,14 +310,35 @@ gh pr create \
   --body "$(cat <<'EOF'
 Closes BAP-<n>
 
-## What this PR does
-<the quick fix, with the touched file:line>
+## Symptôme
+<une ligne en langue produit, ce que voit l'utilisateur>
 
-## Linear ticket
-The full context (symptom, root cause, alternatives, FINDING_CONTEXT for post-deploy verify) lives in BAP-<n>: https://linear.app/heybap/issue/BAP-<n>
+## Cause racine
+<2-4 lignes, ancrées sur file:line, chaîne symptôme → cause issue de Step 3 angle 1>
+
+## Ce que fait cette PR
+<1 paragraphe + file:line touché ; référencer le pattern adjacent réutilisé (Step 3 angle 3) si applicable>
+
+## Fix durable (pas dans cette PR)
+<la propriété structurelle à viser plus tard, ou "—" si rien>
+
+## Alternatives considérées (3 max)
+- <option 1> : <trade-off + raison de ne pas l'avoir choisie>
+- <option 2> : <trade-off + raison>
+- <option 3 (si applicable)> : <trade-off + raison>
+
+## Callers vérifiés (regression check)
+- <file:line> : <contrat préservé | contrat modifié, mitigation = …>
+
+## Tests dans la zone
+- <test:line> : verrouille <behaviour>
+- test gap : <surface non couverte> (si aucun test)
 
 ## Repro
-<one line: where to click in https://heybap.com>
+<une ligne : où cliquer dans https://heybap.com>
+
+## Régression connue
+<commit hash + subject si trouvé via Step 3 angle 5, sinon "non identifié">
 EOF
 )"
 ```
@@ -481,10 +446,6 @@ Output exactly three blocks, no commentary, no headers:
 
 Screenshots are already attached to the Linear ticket and referenced in the Slack post (Step 6 + Step 10) — no manual upload to mention to the user.
 
-If the dedup step (Step 5) stopped you, output instead:
-- `Already covered by: BAP-<n> <ticket URL>` (or the existing PR URL if no ticket exists yet)
-- The draft ticket description you would have shipped, so the user can update the existing ticket / PR.
-
 ## Historical bugs (anchors)
 
 Use as sanity checks if the current bug sounds similar:
@@ -532,7 +493,6 @@ linear:
     triage: "b63fe240-0351-4011-a754-3b69c3cc5c99"
     in_review: "423d89b9-126c-4db1-aa27-05b25baafd20"
 github_repo: "the-agentic-company/bap"
-dedup_window_days: 60
 ```
 
 Keep this in sync with `lubin-skills/feature-bug-complexity-classification/config.yaml`. The router is the canonical source.

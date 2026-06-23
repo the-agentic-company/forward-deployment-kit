@@ -28,7 +28,7 @@ Two distinct entry points feed this single gate:
 1. **Manual (operator-direct)**. Lubin notices a bug or wants a feature while using HeyBap day-to-day. He fires `./go.sh bug "..."` / `./go.sh feature "..."` from the HeyBap Pipeline workspace, or types "bug in heybap: ..." in Claude Code. This is the most common path in practice.
 2. **Auto (pipeline)**. The forward-deployment pipeline skills (`parse-transcript-to-agent-spec`, `bap-prior-art-scout`, `bap-platform-feasibility-check`, `bap-coworker-test-loop`, `transcript-to-bap-coworker`) surface every platform gap or misbehaviour they hit as a structured *finding*, and forward it here.
 
-Both paths land on the same grid, the same dedup window, the same confidence floor, the same dispatch. The router classifies, decides where the finding lands, and invokes the right downstream skill autonomously.
+Both paths land on the same grid, the same confidence floor, the same dispatch. The router classifies, decides where the finding lands, and invokes the right downstream skill autonomously.
 
 Every finding becomes a Linear ticket in the `Bap` team. Linear's own notifications (Slack integration, email, in-app) replace the previous direct Slack posts; create / update events on the ticket are already broadcast to the team. The router never posts to Slack itself.
 
@@ -134,29 +134,9 @@ After classification, three destinations:
 | COMPLEX-SCOPED (surface known, design call required) | `bap-feature-brainstorm` | Investigation + problem statement + 3 defensible options + decision question, posted as a Linear ticket in team `Bap` at status `Triage`, labels `Need More Shaping` + (`Bug` or `Feature`) + `Dogfooding`, assignee **Baptiste** (CTO drives the design choice). For capability-gap findings, the brainstorm skill's own Step 3b quantifies impact (Grain corpus scan + past builds scan + use cases unlocked + verdict) so the ticket carries an Impact section. **Terminal here**: no PR is opened, no tests, no code, no `bap-post-deploy-verify`. The dispatch ends at the Linear ticket. Implementation comes later, via a follow-up SIMPLE ticket that re-enters the gate once the team has picked an option (the brainstorm ticket is transitioned to `In Progress` and the new SIMPLE ticket links back via `relatedTo`). |
 | COMPLEX-FUZZY (direction unclear, no obvious surface, big changes) | `bap-direction-shaping` | Structured problem statement (problem + why fuzzy + possible surfaces + open questions + origin) posted in Slack `#feature-brainstorming` via the Slack MCP. **NO Linear ticket created** at this stage. If the team converges on a direction, the finding gets re-filed via the gate with the new context and lands as SIMPLE or COMPLEX-SCOPED on the next pass. |
 
-The router does not create the ticket (or Slack post) itself. It only classifies and forwards. The downstream skill owns the rest of the loop (investigation depth, PR, Linear ticket creation, Slack post, dedup of its own kind).
+The router does not create the ticket (or Slack post) itself. It only classifies and forwards. The downstream skill owns the rest of the loop (investigation depth, PR, Linear ticket creation, Slack post).
 
-## Dedup before dispatch
-
-Two checks, in order. The downstream skills also dedup at their own layer, but doing a fast check at the router avoids wasting investigation budget on a duplicate.
-
-1. **Linear dedup**: search team `Bap` for the last `dedup_window_days` days (60 by default) using distinctive tokens from the finding (file paths, symbol names, unique noun phrases).
-
-   ```
-   mcp__linear__list_issues({
-     team: "BAP",
-     query: "<distinctive token>",
-     createdAt: "-P60D",
-     limit: 50,
-     includeArchived: false
-   })
-   ```
-
-   Run 2 or 3 queries with different distinctive tokens (one with the file path, one with the symptom noun phrase). If a recent ticket covers the same root cause and is not in status `Canceled` or `Duplicate`, do not dispatch. Return `verdict: "already-reported"` + Linear ticket identifier (e.g. `BAP-123`) + URL.
-
-2. **PR dedup** (SIMPLE only, second layer): `gh pr list --search "<distinctive token>" --state open --repo the-agentic-company/bap`. If an open PR addresses the same root cause but no Linear ticket points at it yet, dispatch SIMPLE anyway so the ticket is created; `bap-bug-report` will detect the existing PR in its own dedup pass and attach to it instead of opening a second one.
-
-A duplicate is worse than no ticket. Never bypass the dedup checks.
+Dedup intentionally removed: in practice the operator's volume is low and a duplicate Linear ticket is fast to spot and cancel manually. The cost of every Phase 2 invocation paying the dedup latency is higher than the cost of the occasional duplicate.
 
 ## Confidence floor
 
@@ -170,7 +150,7 @@ The router returns a structured result to the calling skill:
 
 ```json
 {
-  "verdict": "dispatched | already-reported | already-discussed | low-confidence | config-missing",
+  "verdict": "dispatched | low-confidence | config-missing",
   "classification": {
     "kind": "bug",
     "complexity": "simple | complex-scoped | complex-fuzzy",
@@ -243,7 +223,7 @@ Two ergonomic wrappers, same gate behind both.
 
 The operator types a short message like `bug in heybap: coworker_run is super slow after redeploy` or `feature: coworker_pin to keep favorites at the top`. Claude constructs the same input contract inline and invokes this skill. No wrapper script needed.
 
-**Same gate, same rules**. Manual triggers go through the SAME classification grid, the SAME dedup window (60 days on Linear team `Bap`), the SAME confidence floor (0.6). The only difference is that `context.evidence` is usually thin (just the description) and the 5-minute investigation has to localize the surface from scratch instead of taking a `file:line` reference. The dedup check is even more important here because the operator might already have filed a similar finding from an auto trigger earlier.
+**Same gate, same rules**. Manual triggers go through the SAME classification grid and the SAME confidence floor (0.6). The only difference is that `context.evidence` is usually thin (just the description) and the 5-minute investigation has to localize the surface from scratch instead of taking a `file:line` reference.
 
 ### From `bap-bug-report`, `bap-feature-brainstorm`, or `bap-direction-shaping` (not allowed)
 
@@ -259,16 +239,14 @@ The router is the entry point for *findings*, not for transcripts. A scheduled m
 /loop 60m drain the findings queue
   for each unprocessed entry in ${findingsQueue}:
     invoke feature-bug-complexity-classification with the entry
-    mark processed regardless of verdict (already-reported / dispatched / config-missing / low-confidence)
+    mark processed regardless of verdict (dispatched / config-missing / low-confidence)
 ```
 
-`${findingsQueue}` is a local file (`~/.claude/skills/feature-bug-complexity-classification/queue.jsonl`) that upstream skills append to instead of invoking the router synchronously. This is the right pattern for high-volume pipelines where 5 runners observe the same bug: they append to the queue, the router drains at its own cadence, dedup catches duplicates once.
-
-The queue file becomes the in-flight dedup registry mentioned in the roadmap (axis #6 of the lubin-skills-map). One file replaces both.
+`${findingsQueue}` is a local file (`~/.claude/skills/feature-bug-complexity-classification/queue.jsonl`) that upstream skills append to instead of invoking the router synchronously. This lets high-volume pipelines drain at the router's own cadence rather than blocking each runner on a synchronous dispatch.
 
 ## Anti-patterns
 
-- Calling `bap-bug-report`, `bap-feature-brainstorm`, or `bap-direction-shaping` directly from a pipeline skill instead of going through the router. The router enforces classification + dedup + correct destination; bypassing it loses those.
+- Calling `bap-bug-report`, `bap-feature-brainstorm`, or `bap-direction-shaping` directly from a pipeline skill instead of going through the router. The router enforces classification + correct destination; bypassing it loses those.
 - Classifying a finding as SIMPLE because the operator *wants* it to be a quick fix. Apply the grid strictly. A 60-line change touching two surfaces is COMPLEX.
 - Skipping the 5-minute investigation. Without it, the classification is a guess and the dispatch is unsafe.
 - Dispatching when `operatorConfidence < 0.6`. Reproduce first.
@@ -306,7 +284,6 @@ linear:
 github_repo: "the-agentic-company/bap"
 investigation_time_cap_minutes: 5
 confidence_floor: 0.6
-dedup_window_days: 60
 ```
 
 `bap-bug-report` and `bap-feature-brainstorm` read the same ids (they each have their own `config.yaml` that duplicates the values for portability). When updating any of the Linear ids, update all three configs at once. The router is the canonical source.

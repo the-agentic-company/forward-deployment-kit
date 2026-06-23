@@ -6,6 +6,5 @@ slack:
   louis_user_id: "U0A8M1B4962"
 linear:
   team_key: "BAP"
-  dedup_window_days: 90
 investigation_time_cap_minutes: 5
 log_path: "~/HeyBap Pipeline/logs/direction-shaping.jsonl"

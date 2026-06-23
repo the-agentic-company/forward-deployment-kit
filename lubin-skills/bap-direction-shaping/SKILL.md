@@ -16,11 +16,10 @@ description: |
   **Do not invoke directly.** This skill is a leaf of the Phase 2
   dispatch. Route through `feature-bug-complexity-classification` (or
   the `/phase-2` slash command, or `scripts/submit-finding.sh`). Direct
-  invocation skips dedup against `#feature-brainstorming` history + Linear,
-  and skips the classification grid that decides whether the finding is
-  actually FUZZY (2+ fuzziness criteria) versus SCOPED (1 criterion, route
-  to `bap-feature-brainstorm` instead) versus SIMPLE. The only exception
-  is an explicit operator override.
+  invocation skips the classification grid that decides whether the finding
+  is actually FUZZY (2+ fuzziness criteria) versus SCOPED (1 criterion,
+  route to `bap-feature-brainstorm` instead) versus SIMPLE. The only
+  exception is an explicit operator override.
 ---
 
 # Product direction shaping discussion for HeyBap
@@ -77,23 +76,6 @@ This step does NOT do deep investigation (that comes later, via `bap-feature-bra
 
 If the problem cannot be shaped in 5 minutes, the skill defaults to a thinner post and surfaces "needs more reproduction" as the first open question.
 
-## Step 2 — dedup against the channel
-
-Before posting:
-
-1. Search Slack `#feature-brainstorming` for recent posts with distinctive tokens from the title.
-
-   ```
-   mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_search_public_and_private({
-     query: "<distinctive token> in:#feature-brainstorming",
-     limit: 20
-   })
-   ```
-
-2. Search Linear team `Bap` for the same tokens (last 90 days). If a Linear ticket already exists, the finding has been ticketed and we should NOT also start a discussion thread; return `verdict: already-ticketed` with the ticket URL.
-
-3. If a Slack thread already exists for the same root cause, do NOT post a new one; add a `:eyes:` reaction to the original post (signals "another person hit this") and return `verdict: already-discussed` with the thread URL.
-
 ## Step 3 — post to #feature-brainstorming
 
 Body template (markdown, kept short on purpose; the channel is for human discussion):
@@ -131,7 +113,7 @@ No `@mention` by default. If `operatorConfidence >= 0.85` OR `fuzzyReasons` incl
 
 ```json
 {
-  "verdict": "posted | already-discussed | already-ticketed | low-confidence | config-missing",
+  "verdict": "posted | low-confidence | config-missing",
   "slackThreadUrl": "<url>",
   "slackChannelName": "#feature-brainstorming",
   "fuzzyReasons": ["surface-unknown", "cross-cutting"],
@@ -156,7 +138,6 @@ The thread itself is the trace. This skill does NOT create a Linear ticket no ma
 
 - Posting to `#feature-brainstorming` AND creating a Linear ticket. The whole point of FUZZY is "we don't know yet"; ticketing prematurely locks in a frame.
 - Producing 3 defensible options here. Options come from `bap-feature-brainstorm` once we have enough clarity to scope them. Here, we list questions, not options.
-- Posting without dedup. The channel becomes noisy fast; one thread per discussion.
 - Posting evidence dumps. The channel is for humans; keep the post short (problem + 5-7 lines max). Detailed evidence belongs in a Linear ticket later.
 - Defaulting to FUZZY because the router was uncertain. Uncertainty without specific fuzziness criteria should default to COMPLEX-SCOPED so a Baptiste-owned ticket gets opened. FUZZY is for genuinely undecided direction questions.
 - Single-criterion fuzziness. ONE fuzzy criterion is not enough; ticket as SCOPED. Two or more is the gate.
@@ -174,7 +155,6 @@ slack:
   louis_user_id: "U0A8M1B4962"
 linear:
   team_key: "BAP"
-  dedup_window_days: 90
 investigation_time_cap_minutes: 5
 log_path: "~/HeyBap Pipeline/logs/direction-shaping.jsonl"
 ```

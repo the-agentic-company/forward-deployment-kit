@@ -27,4 +27,3 @@ linear:
 github_repo: "the-agentic-company/bap"
 investigation_time_cap_minutes: 5
 confidence_floor: 0.6
-dedup_window_days: 60
