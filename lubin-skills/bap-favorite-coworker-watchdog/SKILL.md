@@ -229,7 +229,7 @@ slack:
   prod_channel_id: "REPLACE_WITH_AGENTS_PRODUCTION_CHANNEL_ID"  # resolved at runtime via slack_search_channels if placeholder
   lubin_user_id: "U0AT7378GSX"                                  # used only on 3rd-tick escalation
   baptiste_user_id: "U0A87JNV8QP"
-  louis_user_id: "U0A8M1B4962"
+  # louis_user_id intentionally omitted — Louis Adam must never be tagged by this workflow
 bap:
   list_limit: 100
   runs_lookback_hours: 24

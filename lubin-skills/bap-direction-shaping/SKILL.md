@@ -152,7 +152,7 @@ slack:
   brainstorming_channel_id: "REPLACE_WITH_FEATURE_BRAINSTORMING_CHANNEL_ID"  # resolved at runtime via slack_search_channels if placeholder
   baptiste_user_id: "U0A87JNV8QP"
   lubin_user_id: "U0AT7378GSX"
-  louis_user_id: "U0A8M1B4962"
+  # louis_user_id intentionally omitted — Louis Adam must never be tagged by this workflow
 linear:
   team_key: "BAP"
 investigation_time_cap_minutes: 5
