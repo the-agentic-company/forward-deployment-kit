@@ -225,13 +225,17 @@ Research summary: 5 subagents agreed on the root cause as described; adjacency r
 
 Use `mcp__linear__save_comment({ issueId: <uuid>, body: ... })`.
 
-If the ticket was at `Triage`, transition it to `In Review` (PR opened):
+Then transition status and reassign. Once the PR is open, the operator (Lubin) is done; only Baptiste can review and merge, so the ticket leaves Lubin's queue:
 
 ```
-mcp__linear__save_issue({ id: "BAP-<n>", state: "<config.linear.statuses.in_review>" })
+mcp__linear__save_issue({
+  id: "BAP-<n>",
+  state: "<config.linear.statuses.in_review>",      // idempotent: no-op if already In Review
+  assignee: "<config.linear.reviewer_user_id>"      // Baptiste; PR is in his court now
+})
 ```
 
-If it was already at `In Review`, no transition.
+This runs whether the ticket was at `Triage`, `In Progress`, or `In Review` (the call is idempotent on status and reassigns regardless, so a re-implementation loop tick that updates an existing PR still ends with the ticket on Baptiste). `bap-post-deploy-verify` transitions to `Live` after Baptiste's merge + the prod deploy.
 
 ## Step 8 — Slack `#dev` notification (problem + fix + ping Baptiste for review)
 

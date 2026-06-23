@@ -388,12 +388,15 @@ PR title rules:
 
 Capture the PR URL returned by `gh pr create`. You will need it for Step 9.
 
-## Step 9 — update the Linear ticket: status In Review + attach PR
+## Step 9 — update the Linear ticket: status In Review + reassign to Baptiste + attach PR
+
+Once the PR is open, the operator's (Lubin's) work on the ticket is done: he no longer has merge rights on `the-agentic-company/bap`, only Baptiste can review and merge. The ticket must therefore leave Lubin's "assigned to me" queue and land in Baptiste's. Transition status to `In Review` AND reassign to Baptiste:
 
 ```
 mcp__linear__save_issue({
   id: "BAP-<n>",
   state: "<config.linear.statuses.in_review>",
+  assignee: "<config.linear.reviewer_user_id>",      // Baptiste; PR is in his court now
   links: [
     { url: "<PR URL>", title: "PR #<num> — <PR title>" }
   ]
@@ -401,6 +404,8 @@ mcp__linear__save_issue({
 ```
 
 Linear's GitHub integration usually attaches the PR automatically once the branch lands (because the branch name contains `bap-<n>`). The explicit `links` attachment is a belt-and-braces fallback if the integration is delayed.
+
+`bap-post-deploy-verify` later transitions the ticket from `In Review` to `Live` once Baptiste's merge + the prod deploy are confirmed by the verifier. Assignee can stay Baptiste at that point (he is the historical owner of the merged change).
 
 `links` is append-only, so re-running this step in a retry is safe.
 

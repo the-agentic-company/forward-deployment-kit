@@ -8,6 +8,7 @@ linear:
     triage: "b63fe240-0351-4011-a754-3b69c3cc5c99"
     in_progress: "2494a4a4-9b9a-4cff-a4b6-91d499dcf4d2"
     in_review: "423d89b9-126c-4db1-aa27-05b25baafd20"
+  reviewer_user_id: "b05ce629-639d-4861-8de0-c2ba17ce84a6"  # Baptiste — Linear reassign target when the PR opens (Step 7)
 slack:
   workspace: "The Agentic Company"
   dev_channel_id: "C0AH3JU73E0"   # #dev — resolved at runtime via slack_search_channels({ query: "dev" }) if missing
