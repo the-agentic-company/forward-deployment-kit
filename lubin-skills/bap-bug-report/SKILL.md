@@ -12,7 +12,7 @@ description: |
   on a branch, opens a Pull Request, and creates a Linear ticket in
   team `Bap` (key BAP) at status `In Review`, labelled `Bug` (or
   `Feature`) + `Dogfooding`, assigned to the operator (Lubin), with the
-  PR attached as a link. Then posts a structured message in Slack `#dev`
+  PR attached as a link. Then posts a structured message in Slack `#pr-lubin`
   with the original problem, the fix applied, and an `@Baptiste` ping
   asking for review. Use when the user
   describes a bug or feature gap in Bap / HeyBap (chat, coworker output,
@@ -32,7 +32,7 @@ description: |
 
 Goal: the user gives a short one-line bug or feature description; you investigate the Bap codebase in depth; you **create a Linear ticket in team `Bap` first to obtain its identifier (e.g. `BAP-123`), then implement the fix on a branch in `the-agentic-company/bap`, open a Pull Request that references the ticket identifier in its title, and update the Linear ticket to status `In Review` with the PR attached as a link**.
 
-The Linear ticket is the durable report. A follow-up `#dev` Slack message restates the problem, summarises the fix, and pings Baptiste so the review request lands in his Slack inbox (the surface he watches).
+The Linear ticket is the durable report. A follow-up `#pr-lubin` Slack message restates the problem, summarises the fix, and pings Baptiste so the review request lands in his Slack inbox (the surface he watches).
 
 ## Repo & context (always)
 
@@ -384,15 +384,15 @@ mcp__linear__create_attachment_from_upload({ issue: "BAP-<n>", assetUrl: upload.
 
 Record the returned `attachment.url` as the AFTER entry in `evidence.screenshotAttachments[]`. Step 10 cites it in the Slack post.
 
-## Step 10 — Slack `#dev` notification (problem + fix + ping Baptiste for review)
+## Step 10 — Slack `#pr-lubin` notification (problem + fix + ping Baptiste for review)
 
-**This step is MANDATORY**. Without the Slack post, Baptiste doesn't learn the PR exists and the contract is not fulfilled. The skill is NOT done at "PR opened + Linear updated" — it is done at "Slack #dev post permalink captured".
+**This step is MANDATORY**. Without the Slack post, Baptiste doesn't learn the PR exists and the contract is not fulfilled. The skill is NOT done at "PR opened + Linear updated" — it is done at "Slack #pr-lubin post permalink captured".
 
 Required for every shipped PR. The team relies on this message — not on Linear's auto-broadcast — to know what is ready for review. Skip it and Baptiste does not learn the PR exists until he opens Linear on his own.
 
 Resolve identifiers:
 
-- channel id from `config.yaml` (`slack.dev_channel_id`); if it is the placeholder, fall back to `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_search_channels({ query: "dev" })` and cache for the session.
+- channel id from `config.yaml` (`slack.pr_channel_id`); if it is the placeholder, fall back to `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_search_channels({ query: "pr-lubin" })` and cache for the session.
 - reviewer id from `config.yaml` (`slack.review_user_id`); if missing, fall back to `mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_search_users({ query: "Baptiste" })`.
 
 Body template (Slack mrkdwn). The first line is the call to action: a `Fixed, to review` prefix followed by the Baptiste ping and the PR URL — Baptiste sees in one glance that code is written and his queue is "review + merge". Line 2 is the italic PR title. Lines 3-4 describe the problem and the fix with `file:line` refs so Baptiste has the bridge between the symptom and the diff he is about to read.
@@ -419,7 +419,7 @@ Mandatory call sequence:
 
 ```
 result = mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message({
-  channel_id: "<config.slack.dev_channel_id>",
+  channel_id: "<config.slack.pr_channel_id>",
   text: "<composed body above>"
 })
 if result.ok != true OR result.permalink is null:
@@ -445,7 +445,7 @@ Constraints:
 - Both descriptive sentences (problem + fix) carry `file:line` references for the bridge between the PR diff and the symptom.
 - Avoid em-dashes (team house style).
 - The `Screenshots:` line is optional. Add it as a fifth line only when `evidence.screenshotAttachments` is non-empty (`Screenshots : <url1> · <url2>`).
-- The Slack channel id `C0AH3JU73E0` (`#dev`) and the reviewer user id `U0A87JNV8QP` (Baptiste) are pinned in config. Resolve via `slack_search_channels` / `slack_search_users` only if the config placeholder is unchanged; otherwise use the configured ids directly.
+- The Slack channel id `C0BCH5L6PQS` (`#pr-lubin`) and the reviewer user id `U0A87JNV8QP` (Baptiste) are pinned in config. Resolve via `slack_search_channels` / `slack_search_users` only if the config placeholder is unchanged; otherwise use the configured ids directly.
 
 ## Step 11 — watch CI, fix red until green
 
@@ -460,7 +460,7 @@ Required for every PR opened by this skill. The skill owns the green-up; never l
    - vitest failure → re-read Step 4, the fix is probably wrong.
    Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate.
 
-3. **When CI is green, stop here.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. The skill's contract ends at "PR opened, CI green, Slack #dev pinged Baptiste at Step 10." Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow. The Slack post from Step 10 is the handoff; Baptiste reviews + squash-merges from GitHub when he is ready.
+3. **When CI is green, stop here.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. The skill's contract ends at "PR opened, CI green, Slack #pr-lubin pinged Baptiste at Step 10." Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow. The Slack post from Step 10 is the handoff; Baptiste reviews + squash-merges from GitHub when he is ready.
 
 4. **Post-merge cleanup is owned by `bap-post-deploy-verify`**, not by this skill. Once Baptiste merges and the staging / prod deploy lands, the verifier reads the FINDING_CONTEXT off the Linear ticket and confirms the fix in prod. This skill exits at "CI green."
 
@@ -492,7 +492,7 @@ Use as sanity checks if the current bug sounds similar:
 - Do not assume Vercel / S3 / specific vendors unless the repo already uses them.
 - Do not claim something is broken without a `file:line` proof.
 - Do not use em-dashes anywhere (commit message, PR title, PR body, Linear ticket).
-- Do not skip Step 10's Slack `#dev` notification. The team relies on the explicit problem + fix summary and the Baptiste ping to know what is ready for review; Linear's auto-broadcast alone is not enough.
+- Do not skip Step 10's Slack `#pr-lubin` notification. The team relies on the explicit problem + fix summary and the Baptiste ping to know what is ready for review; Linear's auto-broadcast alone is not enough.
 - Do not drop the `<@reviewer-id>` ping from the Slack message. Without it, the post is silent and the review never starts.
 - Do not leave screenshots as local paths in the ticket description when `evidence.screenshots` is non-empty. The Step 6 attachment substep must run and the Slack post (Step 10) must cite the resulting URLs. Telling the user to upload manually defeats the automation.
 - Do not open the PR before the Linear ticket. The ticket identifier needs to be in the branch + title.
@@ -501,7 +501,7 @@ Use as sanity checks if the current bug sounds similar:
 - Do not pick the first plausible fix in Step 4. Enumerate 2 to 3 alternatives grounded in Step 3 and pick on the rubric (reuse > extend > additive > smallest surface). The "Alternatives considérées" section must be real, not retrofitted.
 - Do not introduce a new abstraction, hook, service, or file when Step 3 angle 1 returned an adjacent implementation. Reuse the adjacency or explain why it does not fit.
 - Do not edit a test to make it pass after the fix. A test break is evidence the fix is wrong; return to Step 4 and pick a different alternative.
-- Do not call `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The contract stops at "CI green + Slack #dev pinged Baptiste."
+- Do not call `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The contract stops at "CI green + Slack #pr-lubin pinged Baptiste."
 - Do not trigger any deploy workflow (`release-main.yml`, `prod-release.yml`) from this skill. Deploys are owned by Baptiste post-merge.
 
 ## Config

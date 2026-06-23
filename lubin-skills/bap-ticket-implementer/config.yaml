@@ -11,7 +11,7 @@ linear:
   reviewer_user_id: "b05ce629-639d-4861-8de0-c2ba17ce84a6"  # Baptiste — Linear reassign target when the PR opens (Step 7)
 slack:
   workspace: "The Agentic Company"
-  dev_channel_id: "C0AH3JU73E0"   # #dev — resolved at runtime via slack_search_channels({ query: "dev" }) if missing
+  pr_channel_id: "C0BCH5L6PQS"   # #pr-lubin — resolved at runtime via slack_search_channels({ query: "pr-lubin" }) if missing
   review_user_id: "U0A87JNV8QP"   # Baptiste (CTO, reviewer) — resolved via slack_search_users({ query: "Baptiste" }) if missing
 github:
   repo: "the-agentic-company/bap"

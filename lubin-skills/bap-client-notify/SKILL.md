@@ -188,7 +188,7 @@ When `createdChannel: true`, the orchestrator's Step 7 consolidated report surfa
 ## Anti-patterns
 
 - Posting internal jargon (skill names, MCP server ids, FINDING_CONTEXT, BAP-<n> identifiers). The client reads this; product-language only.
-- @mentioning anyone with `<@U…>`. The post is informative, not a review request. Pings belong in `#dev` (handled by other skills).
+- @mentioning anyone with `<@U…>`. The post is informative, not a review request. Pings belong in `#pr-lubin` (handled by other skills).
 - Using em-dashes. Team style ban.
 - Skipping the idempotence log. Without it, every `/loop` tick reposts the planned message and the channel fills with duplicates.
 - Auto-creating private channels. Default is public; the operator switches to private manually if the account requires it.

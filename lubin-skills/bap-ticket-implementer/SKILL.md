@@ -7,7 +7,7 @@ description: |
   `the-agentic-company/bap` repo using the same deep-research 5-subagent
   pattern as `bap-bug-report` (symptom → cause walk, callers, adjacency,
   tests, history), commits the result, opens or updates the PR, then
-  posts a structured notification in Slack `#dev` with the original
+  posts a structured notification in Slack `#pr-lubin` with the original
   problem, the fix applied, the PR + commit, and an `@Baptiste` ping
   for review. The ticket gets a Linear comment with the SHA, and (if the
   ticket was at `Triage`) is transitioned to `In Review`. Designed to
@@ -20,7 +20,7 @@ description: |
 
 # Autonomous Linear ticket implementer
 
-`bap-bug-report` creates tickets with a proposed fix; this skill closes the gap when nobody picks them up. It pulls assigned tickets with the explicit opt-in label `agent-autonomous`, implements the work, commits, opens / updates the PR, comments the ticket, and posts a `#dev` message with the original problem + fix summary + a Baptiste ping so the review request lands where Baptiste actually looks for them.
+`bap-bug-report` creates tickets with a proposed fix; this skill closes the gap when nobody picks them up. It pulls assigned tickets with the explicit opt-in label `agent-autonomous`, implements the work, commits, opens / updates the PR, comments the ticket, and posts a `#pr-lubin` message with the original problem + fix summary + a Baptiste ping so the review request lands where Baptiste actually looks for them.
 
 Designed for the calm cases: a small fix, the proposed solution is already written on the ticket, the operator is asleep / in a meeting / off, and the queue can drain on its own. **Refuses** to touch anything ambiguous, large, or controversial.
 
@@ -237,13 +237,13 @@ mcp__linear__save_issue({
 
 This runs whether the ticket was at `Triage`, `In Progress`, or `In Review` (the call is idempotent on status and reassigns regardless, so a re-implementation loop tick that updates an existing PR still ends with the ticket on Baptiste). `bap-post-deploy-verify` transitions to `Live` after Baptiste's merge + the prod deploy.
 
-## Step 8 — Slack `#dev` notification (problem + fix + ping Baptiste for review)
+## Step 8 — Slack `#pr-lubin` notification (problem + fix + ping Baptiste for review)
 
-**This step is MANDATORY**. Without the Slack post, Baptiste doesn't learn the PR exists; the autonomous loop is NOT done at "PR opened + Linear updated" — it is done at "Slack #dev post permalink captured".
+**This step is MANDATORY**. Without the Slack post, Baptiste doesn't learn the PR exists; the autonomous loop is NOT done at "PR opened + Linear updated" — it is done at "Slack #pr-lubin post permalink captured".
 
 Resolve identifiers:
 
-- channel id from `config.yaml` (`slack.dev_channel_id` = `C0AH3JU73E0` = `#dev`); fall back to `slack_search_channels({ query: "dev" })` only if the placeholder is still in place.
+- channel id from `config.yaml` (`slack.pr_channel_id` = `C0BCH5L6PQS` = `#pr-lubin`); fall back to `slack_search_channels({ query: "pr-lubin" })` only if the placeholder is still in place.
 - reviewer id from `config.yaml` (`slack.review_user_id` = `U0A87JNV8QP` = Baptiste); fall back to `slack_search_users({ query: "Baptiste" })` only if missing.
 
 Body template (Slack mrkdwn). The first line is the call to action: a `Fixed, to review` prefix followed by the Baptiste ping and the PR URL — at a glance, the post reads as "code written, Baptiste reviews + merges". Line 2 is the italic PR title. Lines 3-4 describe the problem and the fix with `file:line` refs.
@@ -259,7 +259,7 @@ Mandatory call sequence:
 
 ```
 result = mcp__aa816864-db59-4de1-a375-68c8cccbfe71__slack_send_message({
-  channel_id: "<config.slack.dev_channel_id>",
+  channel_id: "<config.slack.pr_channel_id>",
   text: "<composed body above>"
 })
 if result.ok != true OR result.permalink is null:
@@ -296,7 +296,7 @@ Required for every PR opened or updated by this skill. The autonomous loop owns 
 
    Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate. If after 3 fix iterations the failure is genuinely architectural (e.g. requires a much larger refactor than the 120-line cap), halt the loop, post a Linear comment "CI failure not resolvable within the ticket's scope — escalating to operator", and exit. The PR stays open for Baptiste to look at.
 
-3. **When CI is green, stop here.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. The skill's contract ends at "PR opened or updated, CI green, Slack #dev pinged Baptiste at Step 8." Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow. Baptiste reviews and squash-merges from GitHub when he is ready.
+3. **When CI is green, stop here.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. The skill's contract ends at "PR opened or updated, CI green, Slack #pr-lubin pinged Baptiste at Step 8." Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow. Baptiste reviews and squash-merges from GitHub when he is ready.
 
 4. **Post-merge cleanup is owned by `bap-post-deploy-verify`**, not by this skill. Once Baptiste merges and the deploy lands, the verifier reads the FINDING_CONTEXT off the Linear ticket and confirms the fix in prod.
 
@@ -345,7 +345,7 @@ The cap of 5 implementations per tick prevents a runaway loop from carpet-bombin
 - Forgetting the `Screenshots:` line when the ticket has image attachments. Slack auto-unfurls Linear asset URLs, so citing them gives Baptiste the repro evidence inline instead of forcing a Linear roundtrip.
 - Re-implementing a ticket whose PR is already open and CI-green. Check the existing PR first; if it solves the ticket, comment and stop, do not duplicate.
 - Forgetting the FINDING_CONTEXT downstream contract. `bap-post-deploy-verify` reads it from the Linear ticket; if it is missing, fail eligibility instead of generating one (would lose the original signal).
-- Calling `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The autonomous loop stops at "CI green + Slack #dev pinged."
+- Calling `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The autonomous loop stops at "CI green + Slack #pr-lubin pinged."
 - Triggering any deploy workflow (`release-main.yml`, `prod-release.yml`). Deploys are owned by Baptiste post-merge.
 
 ## Config
@@ -361,7 +361,7 @@ linear:
   in_review_status: "423d89b9-126c-4db1-aa27-05b25baafd20"
 slack:
   workspace: "The Agentic Company"
-  dev_channel_id: "C0AH3JU73E0"   # #dev — set once via slack_search_channels({ query: "dev" })
+  pr_channel_id: "C0BCH5L6PQS"   # #pr-lubin — set once via slack_search_channels({ query: "pr-lubin" })
   review_user_id: "U0A87JNV8QP"   # Baptiste — set once via slack_search_users({ query: "Baptiste" })
 github:
   repo: "the-agentic-company/bap"
@@ -375,7 +375,7 @@ limits:
 log_path: "~/HeyBap Pipeline/logs/ticket-implementer.jsonl"
 ```
 
-If `dev_channel_id` or `review_user_id` is missing / a placeholder, the skill resolves it at runtime (via `slack_search_channels({ query: "dev" })` and `slack_search_users({ query: "Baptiste" })`) and caches the result in memory for the rest of the session.
+If `pr_channel_id` or `review_user_id` is missing / a placeholder, the skill resolves it at runtime (via `slack_search_channels({ query: "pr-lubin" })` and `slack_search_users({ query: "Baptiste" })`) and caches the result in memory for the rest of the session.
 
 ## See also
 
