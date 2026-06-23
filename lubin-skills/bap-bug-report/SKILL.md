@@ -159,20 +159,22 @@ Produce three things, in this order:
 5. UX feedback — silent drops with no toast / error.
 6. **DO NOT assume Vercel, S3, Cloudflare, etc.** Bap is **not** on Vercel. Frame body-limit / runtime claims as "any host body limit", not vendor-specific.
 
-## Step 4 — design the fix, honestly (alternatives mandatory, simplest wins)
+## Step 4 — design the fix, honestly (alternatives ordered, simplest first)
 
-Before committing to a fix, **enumerate 2 to 3 alternative approaches** grounded in the research from Step 3. Each alternative must:
+Before committing to a fix, **enumerate 2 to 3 alternative approaches** grounded in the research from Step 3 and **rank them in priority order** (the iteration loop in Step 7.5 walks down this list — alt #1 first, then #2 if #1 fails Chrome MCP verification, then #3 if #2 fails). Each alternative must:
 
 - Be technically possible given the constraints map.
-- Touch a different surface or use a different abstraction (so the comparison is real, not cosmetic).
+- Touch a different surface or use a different abstraction (so the comparison is real, not cosmetic — same alternative with cosmetic phrasing is one alternative).
 - Carry an honest trade-off line: what does it cost that the others do not (lines, surfaces touched, test churn, regression risk, performance, learning curve for the next person reading it).
 
-Pick the alternative that **minimises new code while resolving the root cause**, preferring:
+**Ranking rubric** (priority 1 = top, gets implemented first):
 
-- Reusing an existing abstraction from Step 3 angle 3 over inventing a new one.
-- Editing one site over editing two (when the constraints map allows).
-- Lifting a constant or wiring a missing listener over restructuring a module.
-- A change whose every caller (Step 3 angle 2) keeps the same contract over a change that requires updating callers.
+1. **Reuses** an existing abstraction from Step 3 angle 3 (no new code).
+2. **Edits one site** rather than two (when the constraints map allows).
+3. **Lifts a constant** or wires a missing listener over restructuring a module.
+4. Keeps **every caller's contract** unchanged (Step 3 angle 2).
+
+The alternatives **list** (`pickedAlternatives = [alt1, alt2, alt3]`) is the iteration list. Step 7.5 picks alt1 first, falls back to alt2 if verification fails, etc. If only 1 alternative is genuinely defensible (e.g. a literal one-line typo fix with no other shape), say so explicitly — the iteration loop then has only one attempt and exits to the FAILED template if it doesn't verify. **Do not pad the list with strawmen** to make the loop look richer; honest 1-alternative cases happen and the loop handles them.
 
 **Anti-complexification rules** (apply to every fix, no exceptions):
 
@@ -266,9 +268,22 @@ Title rules:
 - No em-dashes anywhere.
 - Do not prefix the Linear ticket title itself with `BAP-<n>`; Linear adds the identifier on display.
 
-## Step 7 — implement the fix on a branch
+## Step 7 — implement the fix on a branch (one iteration of the verify loop)
 
-On the local clone:
+Step 7 + Step 7.5 form a loop: implement alt #1 → push → verify in Chrome MCP → on FAIL roll forward to alt #2, re-implement on the SAME branch (new commit), re-push, re-verify. The loop exits when verification PASSES, or when `pickedAlternatives` is exhausted, or when iteration cap `config.local_dev.max_verify_iterations` (default 3) is reached. Only the terminal state triggers Step 8 (PR-open / update), Step 9 (Linear), and Step 10 (Slack).
+
+Iteration bookkeeping (record at the start of each attempt):
+
+```json
+{
+  "iterations": [
+    { "n": 1, "alt": "alt1 label", "commitSha": "abc1234", "verifyResult": { "passed": false, "observed": "..." } },
+    { "n": 2, "alt": "alt2 label", "commitSha": "def5678", "verifyResult": { "passed": true,  "observed": "..." } }
+  ]
+}
+```
+
+On the local clone — **iteration 1**:
 
 ```bash
 cd /tmp/bap-investigation   # or wherever the clone lives
@@ -276,9 +291,17 @@ git checkout main && git pull
 git checkout -b fix/bap-<n>-<short-slug>     # or feat/bap-<n>-<short-slug> for features
 ```
 
+On **iterations 2+**: stay on the same branch. Before implementing the new alternative, **revert the previous iteration's commit** so the working tree is clean for the new approach (otherwise iter 1's stale edits leak into iter 2's final state):
+
+```bash
+git revert HEAD --no-edit       # "Revert iter N-1" appears as its own commit; clean history, no force-push
+```
+
+The PR is opened only at terminal state (Step 8). Mid-loop, the branch lives on GitHub but no PR exists yet — Baptiste isn't pinged until the loop exits successfully. The Linear ticket records each attempt as a comment for the audit trail.
+
 Slug rules: kebab-case, ≤4 words, derived from the bug noun (e.g. `chat-column-collapse`, `audio-attachment-size`, `coworker-postmessage-listener`). The `bap-<n>` prefix lets Linear's GitHub integration auto-attach the branch + PR.
 
-**Implement the QUICK FIX, nothing more.** Constraints:
+**Implement the alternative for THIS iteration** (`pickedAlternatives[iteration - 1]`), nothing more. Constraints:
 
 - Smallest possible diff. One or two files.
 - No refactor, no unrelated cleanup, no defensive coding for cases that cannot happen, no comments explaining the fix (the ticket description and PR body explain).
@@ -293,9 +316,9 @@ Slug rules: kebab-case, ≤4 words, derived from the bug noun (e.g. `chat-column
 - if both: `bun run test:ci` from the repo root.
 - always run `cd apps/web && bun run typecheck` and `bun run lint` (oxlint) on the touched files.
 
-Observe a green pass before staging. If a test breaks unexpectedly, do not edit the test to make it pass; treat the breakage as new evidence that the fix is wrong and return to Step 4 to pick a different alternative. If the local run is red, fix the cause; do not push and rely on CI to catch it.
+Observe a green pass before staging. If a test breaks unexpectedly, do not edit the test to make it pass; treat the breakage as new evidence that the current iteration's alternative is wrong — the verify loop in Step 7.5 will pick the NEXT alternative. If the local run is red, fix the cause; do not push and rely on CI to catch it.
 
-Commit with a Bap-style message that references the ticket:
+Commit with a Bap-style message that references the ticket. On iterations 2+, the message is prefixed with `(iter N)` so the PR log shows the loop:
 
 ```
 <Area>: <verb> <object> (BAP-<n>)
@@ -376,13 +399,47 @@ Append the path to `evidence.screenshots` with `kind: "after"`.
 
 ### C. If verify FAILED — do not lie to Baptiste
 
-If `verifyResult.passed === false` (the symptom still reproduces after the swap, or the expected fix evidence is missing):
+If `verifyResult.passed === false` (the symptom still reproduces after the swap, or the expected fix evidence is missing): **iterate on the next alternative** before declaring failure.
 
-- Do NOT proceed to Step 10's `Fixed, to review` post. The fix did not actually fix.
-- Add a Linear comment on BAP-<n> citing the observed state and the failed assertion.
-- Keep the PR open as **draft** (convert via `gh pr ready --undo <num>` if needed). It is still useful for Baptiste to read the code, but it is not "ready for review".
-- Step 9 leaves the ticket on `In Progress` (NOT `In Review`) and assigned to Lubin (NOT reassigned to Baptiste). The autonomous loop can retry on the next tick once Lubin re-investigates.
-- Step 10 still posts to `#pr-lubin` but with the FAILED template (subsection F of Step 10), pinging Lubin (not Baptiste) so he sees the broken fix first.
+The iteration controller (this is the outer loop around Step 7 + Step 7.5):
+
+```
+iter = current iteration number (1-indexed)
+maxIter = min(config.local_dev.max_verify_iterations, len(pickedAlternatives))
+
+if verifyResult.passed === true:
+  exit loop → continue to Step 8 (open or update PR) → Step 9 PASS path → Step 10 PASS template
+
+elif verifyResult.skipped === true:
+  exit loop → continue to Step 8 → Step 9 PASS path → Step 10 SKIPPED template
+  (skipped means "couldn't verify", not "fix is wrong" — we still hand off to Baptiste with the explicit caveat)
+
+elif verifyResult.passed === false:
+  # roll back this iteration's commit only if it broke local tests; otherwise keep it for the iteration log
+  add to ticket comment: "Iteration ${iter}: tried ${pickedAlternatives[iter-1].label}, verify KO. ${verifyResult.observed}"
+
+  if iter < maxIter:
+    # try the next alternative
+    iter += 1
+    GOTO Step 7 (still on the same fix branch, new commit prefix "(iter ${iter})")
+
+  elif iter === maxIter AND a NEW finding emerged during the loop suggesting the bug is COMPLEX-SCOPED:
+    # escalate gracefully — the bug isn't really SIMPLE
+    invoke bap-feature-brainstorm with the augmented context (original + iteration log)
+    close the SIMPLE ticket as "re-classified" + link the new brainstorm ticket
+    exit (no PR PASS / no Slack post here — the brainstorm skill posts its own)
+
+  else:
+    # exhausted alternatives, no escalation candidate — terminal FAILED
+    exit loop → continue to Step 8 (ensure PR is in draft state via gh pr ready --undo if needed) → Step 9 FAILED path → Step 10 FAILED template
+```
+
+Concretely:
+
+- **Same branch through all iterations.** Each iteration adds one new commit prefixed `(iter N)`; never `git reset --hard` or force-push. The PR's commit log IS the iteration audit trail.
+- **Terminal state only.** The PR / Linear / Slack are only updated at loop exit (PASS, SKIPPED, escalated, or exhausted FAILED). Mid-loop, the only side-effect is the Linear ticket comment recording each attempt.
+- **Iteration cap is min(`config.local_dev.max_verify_iterations`, `len(pickedAlternatives)`)**. If only 1 alternative is genuinely defensible (Step 4 said so), the loop has 1 attempt and exits to FAILED if it doesn't verify. If 3 alternatives exist, up to 3 attempts.
+- **Escalation trigger.** During iteration, if the failure observation reveals that the bug requires a structural change (new abstraction, schema migration, cross-cutting refactor) that Step 4's alternatives did not predict, ESCALATE rather than continue thrashing. The escape valve invokes `bap-feature-brainstorm` with the new evidence; the original SIMPLE ticket is closed with a link to the brainstorm. Lubin re-runs `/phase-2` later if the team picks an option.
 
 ### D. Restore the operator's working tree (always — even on failure)
 
@@ -401,9 +458,19 @@ Run subsection D inside a trap / finally so a thrown error in B does not leave t
 - **Backend-only fix** (no UI surface). Skip subsections A-D. Verify via `curl` against an API endpoint or via `mcp__bap-local__chat_run` / `coworker_run`, asserting on the response shape. Record `verifyResult.assertion` in plain English just the same.
 - **Localhost down** OR **Chrome MCP disconnected** AND **Playwright fixture broken**. Set `verifyResult = { passed: false, skipped: true, reason: "..." }` and continue. Step 10 will use the SKIPPED template, explicitly flagging that nothing was verified — Baptiste then re-runs locally before merging.
 
-## Step 8 — open the PR
+## Step 8 — open the PR (terminal step of the verify loop)
 
-The PR body carries **all the deep-research artefacts**: cause racine, alternatives, callers, tests, régression. The Linear ticket stays short (Step 6 is a status card); the PR is where Baptiste reviews the code and the context together.
+Only runs after the verify loop in Step 7.5 has exited (PASS, SKIPPED, or exhausted FAILED). Mid-loop the branch is pushed but no PR exists yet.
+
+The PR body carries **all the deep-research artefacts**: cause racine, alternatives **tried during the loop**, callers, tests, régression. The Linear ticket stays short (Step 6 is a status card); the PR is where Baptiste reviews the code and the context together.
+
+PR state on open:
+
+- **PASS** terminal → open as **ready** (default `gh pr create`). Slack will post "Fixed, to review" in Step 10.
+- **SKIPPED** terminal (couldn't verify) → open as **ready** with an explicit "Verified : skipped" callout in the PR body. Baptiste re-runs locally before merging.
+- **FAILED** terminal (exhausted alternatives, none verified) → open as **draft** (`gh pr create --draft`). Slack will post "Vérif KO, à reprendre" pinging Lubin in Step 10. Baptiste does not get pinged on a broken PR.
+
+When the FINDING_CONTEXT / iteration log gets large, write it to the PR body's "Iterations" section (one bullet per attempt: alt label, commit SHA, verifyResult.observed).
 
 ```bash
 git push -u origin <branch>

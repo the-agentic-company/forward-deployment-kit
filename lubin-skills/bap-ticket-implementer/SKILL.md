@@ -127,7 +127,9 @@ Synthesise: is the ticket still implementable as written? Three outcomes:
 - **Yes, with small adaptation**: note the adaptation in a `## Adaptation` Linear comment, then proceed.
 - **No, stale**: post a Linear comment listing the conflicts (file moved, behaviour already shipped in another commit, contract change), do not implement, set ticket label `needs-refresh`. Done.
 
-## Step 5 — implement on a branch (smallest viable diff)
+## Step 5 — implement on a branch (one iteration of the verify loop)
+
+Step 5 + Step 6 + Step 6.5 form the same iteration loop as `bap-bug-report` Step 7 + 7.5. Each iteration implements one alternative from Step 4's enumeration (the ticket usually lists the preferred fix; alternatives are derived from the research pass), pushes the branch, verifies in Chrome MCP. On FAIL the loop rolls forward to the next alternative — revert previous iteration's commit, apply the new approach, re-push, re-verify. Loop exits on PASS, SKIPPED, or `min(config.local_dev.max_verify_iterations, len(alternatives))` reached.
 
 Same constraints as `bap-bug-report` Step 7:
 
@@ -137,6 +139,8 @@ Same constraints as `bap-bug-report` Step 7:
 - No comments in the code explaining the bug.
 - No em-dashes anywhere.
 
+Iteration 1:
+
 ```bash
 ls -d /tmp/bap-* 2>/dev/null || gh repo clone the-agentic-company/bap /tmp/bap-impl-$(date +%s)
 cd /tmp/bap-*
@@ -144,7 +148,9 @@ git fetch origin && git checkout main && git pull
 git checkout -b <branchPrefix><n>-<short-slug>      # e.g. fix/bap-127-skill-add-race
 ```
 
-Implement the fix. Then run the full local test suite for the touched packages before staging:
+Iterations 2+: stay on the same branch, revert the previous iteration's commit (`git revert HEAD --no-edit`) to clear the working tree, then implement the new alternative. The PR is opened only at loop exit (Step 6 terminal — same model as `bap-bug-report` Step 8).
+
+Implement the fix for this iteration. Then run the full local test suite for the touched packages before staging:
 
 - if the change touches `apps/web/`: `cd apps/web && bun run test:integration`.
 - if the change touches `packages/core/`: `cd packages/core && bun run test:unit`.
@@ -163,29 +169,41 @@ Adaptation, if any, noted in Linear comment timestamp <iso>.
 File:line refs: <list>
 ```
 
-## Step 6 — push + open or update PR
+## Step 6 — push branch (PR opens only at loop terminal)
 
-If a PR already exists for this ticket (linked via Linear's GitHub integration):
-
-```bash
-git push origin <branch>
-gh pr edit <num> --repo the-agentic-company/bap --add-label autonomous-implementation
-gh pr review <num> --comment --body "Updated by bap-ticket-implementer at <iso>. Diff: <gh diff link>"
-```
-
-If no PR exists yet:
+Mid-loop, each iteration's commit is pushed to the branch but no PR is opened yet. Baptiste is not pinged until verification passes (or the loop exhausts).
 
 ```bash
-git push -u origin <branch>
-gh pr create \
-  --repo the-agentic-company/bap \
-  --base main \
-  --title "BAP-<n> <Area>: <verb> <object>" \
-  --body "Closes BAP-<n>. Implemented autonomously by bap-ticket-implementer. Linear ticket carries full context, FINDING_CONTEXT, and acceptance criteria." \
-  --label autonomous-implementation
+git push origin <branch>     # -u on iteration 1, plain push on 2+ (branch already tracks upstream)
 ```
 
-Capture the PR URL.
+At loop **terminal** (PASS, SKIPPED, or exhausted FAILED): open or update the PR.
+
+PR state on open:
+
+- PASS terminal → ready (default `gh pr create`).
+- SKIPPED terminal → ready with explicit "Verified : skipped" callout.
+- FAILED terminal (exhausted alternatives) → **draft** (`gh pr create --draft`). Baptiste not pinged.
+
+```bash
+# Branch already pushed across iterations; PR-open is the last step before Linear + Slack
+if gh pr view <branch> --repo the-agentic-company/bap 2>/dev/null; then
+  # existing PR (rare for this skill, but possible if a previous run already opened one)
+  gh pr edit <num> --repo the-agentic-company/bap --add-label autonomous-implementation
+  if [ "$TERMINAL" = "PASS" ]; then gh pr ready <num>; fi
+  if [ "$TERMINAL" = "FAILED" ]; then gh pr ready <num> --undo; fi
+else
+  gh pr create \
+    --repo the-agentic-company/bap \
+    --base main \
+    --title "BAP-<n> <Area>: <verb> <object>" \
+    --body "Closes BAP-<n>. Implemented autonomously by bap-ticket-implementer over <iterCount> iteration(s). Linear ticket carries full context, FINDING_CONTEXT, acceptance criteria, and the iteration log." \
+    --label autonomous-implementation \
+    $([ "$TERMINAL" = "FAILED" ] && echo "--draft")
+fi
+```
+
+Capture the PR URL for Step 7 (Linear comment) and Step 8 (Slack post).
 
 ## Step 6.5 — verify the fix end-to-end on localhost (Chrome MCP, mandatory for UI changes)
 
@@ -268,13 +286,39 @@ mcp__linear__create_attachment_from_upload({ issue: "BAP-<n>", assetUrl: upload.
 
 Record the returned `attachment.url` for Step 8 (Slack post) to cite.
 
-### F. Fallbacks (autonomous loop is often AFK)
+### F. Iteration controller (same as `bap-bug-report` Step 7.5 subsection C)
+
+```
+iter = current iteration number (1-indexed)
+maxIter = min(config.local_dev.max_verify_iterations, len(alternatives))
+
+if verifyResult.passed === true:
+  exit loop → Step 6 PR open (ready) → Step 7 PASS path → Step 8 PASS template
+
+elif verifyResult.skipped === true:
+  exit loop → Step 6 PR open (ready) → Step 7 PASS path → Step 8 SKIPPED template
+
+elif verifyResult.passed === false:
+  post Linear ticket comment: "Iteration ${iter}: tried ${alternatives[iter-1].label}, verify KO. ${verifyResult.observed}"
+
+  if iter < maxIter:
+    iter += 1
+    GOTO Step 5 (revert previous commit, implement next alternative, push, re-enter Step 6.5)
+
+  elif iter === maxIter AND failure observation suggests bug is COMPLEX-SCOPED:
+    label the Linear ticket `needs-refresh`, post a comment summarising the iteration log + the COMPLEX-SCOPED signal, exit (no PR ready, no Slack)
+
+  else:
+    exit loop → Step 6 PR open (draft) → Step 7 FAILED path → Step 8 FAILED template
+```
+
+Same invariants as `bap-bug-report` Step 7.5: same branch through all iterations (each iteration revert + new commit, no force-push), Linear / PR / Slack only updated at terminal state.
+
+### G. Fallbacks (autonomous loop is often AFK)
 
 - Chrome MCP unreachable → Playwright fallback (headless chromium against `localhost:3000` with `storage-state.json`). Same swap + sleep + assertion logic.
 - Localhost down → `verifyResult.skipped = true, reason = "localhost-down"`.
 - Backend-only ticket → verify via `curl` or `mcp__bap-local__chat_run` / `coworker_run`, assert on response shape; `verifyResult.skipped = false`.
-
-If `verifyResult.passed === false && !verifyResult.skipped`: Step 7 keeps the ticket on `In Progress` (NOT `In Review`), keeps assignee Lubin (NOT Baptiste), and Step 8 uses the FAILED template pinging Lubin.
 
 ## Step 7 — Linear comment + state transition
 

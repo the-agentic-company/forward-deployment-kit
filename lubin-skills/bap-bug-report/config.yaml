@@ -24,3 +24,4 @@ local_dev:
   bap_main_checkout: "/Users/lubin.danilo/bap/bap"   # operator's checkout serving the dev server; Step 7.5 swaps branches here
   dev_server_url: "http://localhost:3000"            # probe target before Step 2 / 7.5 + nav target for Chrome MCP
   hmr_wait_seconds: 5                                # post-swap delay for Next.js HMR to recompile before re-navigating
+  max_verify_iterations: 3                           # outer loop cap (Step 7 + 7.5): tries up to N alternatives before exhausting to FAILED
