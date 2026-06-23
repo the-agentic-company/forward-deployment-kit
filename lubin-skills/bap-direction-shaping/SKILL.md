@@ -13,6 +13,14 @@ description: |
   re-files the finding through `feature-bug-complexity-classification`
   with the new context; it will then be classified as SIMPLE or
   COMPLEX-SCOPED and get a Linear ticket through the standard path.
+  **Do not invoke directly.** This skill is a leaf of the Phase 2
+  dispatch. Route through `feature-bug-complexity-classification` (or
+  the `/phase-2` slash command, or `scripts/submit-finding.sh`). Direct
+  invocation skips dedup against `#feature-brainstorming` history + Linear,
+  and skips the classification grid that decides whether the finding is
+  actually FUZZY (2+ fuzziness criteria) versus SCOPED (1 criterion, route
+  to `bap-feature-brainstorm` instead) versus SIMPLE. The only exception
+  is an explicit operator override.
 ---
 
 # Product direction shaping discussion for HeyBap

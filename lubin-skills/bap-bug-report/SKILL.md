@@ -20,6 +20,13 @@ description: |
   proposed as a PR + a tracked Linear ticket without manual copy-paste.
   Triggers: "Bug: …", "Feature: …", "ouvre un ticket pour …",
   "open a PR for …", "audit the bug …".
+  **Do not invoke directly.** This skill is a leaf of the Phase 2 dispatch.
+  Route through `feature-bug-complexity-classification` (or the `/phase-2`
+  slash command, or `scripts/submit-finding.sh`). Direct invocation skips
+  the dedup pass (60-day Linear search, open-PR scan) and the
+  classification grid (SIMPLE vs COMPLEX-SCOPED vs COMPLEX-FUZZY), which
+  silently produces duplicate tickets and wrong routing. The only exception
+  is an explicit operator override.
 ---
 
 # Bap bug / feature → PR + Linear ticket

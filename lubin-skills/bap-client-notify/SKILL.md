@@ -14,6 +14,12 @@ description: |
   Posts are short, plain-French, business-readable; no internal jargon
   (no skill names, no MCP ids, no FINDING_CONTEXT). Use from
   `transcript-to-bap-coworker` Step 2.5 and Step 6.5.
+  **Do not invoke directly.** This skill is called by the Phase 1
+  orchestrator at fixed points (Step 2.5 planned, Step 6.5 validated).
+  Direct invocation outside the orchestrator can break the idempotence
+  guard (the JSONL log is keyed on `callId` + `phase`) and produce
+  duplicate client posts. The only exception is reposting after a manual
+  channel misconfiguration, with an explicit operator instruction.
 ---
 
 # Client status notifier for the forward deployment pipeline
