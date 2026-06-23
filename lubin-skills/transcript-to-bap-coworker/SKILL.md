@@ -74,11 +74,20 @@ Do not invoke when:
                               |
                               v
                 +-----------------------------+
+                |  bap-client-notify (planned)|--> Slack client channel:
+                |  (after step 1, before 3)   |    "coworkers planifiés + outils"
+                |  bap-client-notify (validated)   "coworkers en place + URLs"
+                |  (after step 5)             |
+                +-----------------------------+
+                              |
+                              v
+                +-----------------------------+
                 |  consolidated report:       |
                 |  - @username per agent      |
                 |  - status (live / handoff)  |
                 |  - test artefacts links     |
                 |  - human checkpoints open   |
+                |  - client notification links|
                 +-----------------------------+
 ```
 
@@ -269,6 +278,37 @@ When done, paste the workspaceMcpServerId here (or accept the auto-detect prompt
 Auto-detect heuristic: once the human acks, the orchestrator calls `mcp__bap__coworker_list`, picks the most recently created coworker with this MCP wired (a reference seed coworker can be created for this purpose), and reads the id. Caching the result avoids repeating the human step for the next agents in the batch.
 
 Persist the id to `${skillFolderRoot}/<callId>/mcps.json` so the test loop can wire later coworkers without re-asking.
+
+## Step 2.5. Notify the client channel (planned coworkers)
+
+Before any code generation or deployment, post a "planned" status to the prospect's Slack channel via [bap-client-notify](../bap-client-notify/SKILL.md). This gives the team a heads-up of what is about to be built and what integrations each coworker will use.
+
+Skip this step when `options.dryRun == true` or when every surviving agent ended up in `notBuilt` (nothing to announce).
+
+```
+notified = invoke bap-client-notify
+  phase: "planned"
+  prospect: spec.callMeta.prospect
+  callId:   spec.callMeta.callId
+  coworkers: agents.map(a => ({
+    name:      a.slug.startsWith("@") ? a.slug : "@" + a.slug,
+    objective: a.goal,                             // one-liner from the spec, plain French
+    tools:     [
+      ...a.toolPlan.nativeIntegrations.map(prettyIntegrationName),
+      ...a.toolPlan.existingWorkspaceMcps.map(m => m.displayName),
+      ...a.toolPlan.sandboxClis.map(c => c + " (sandbox)"),
+      ...a.toolPlan.customMcpsToBuild.map(m => m.name + " (sur mesure)"),
+      ...(a.toolPlan.miniApp ? ["Mini-app interactive"] : [])
+    ]
+  }))
+  options: { createIfMissing: true }
+```
+
+`prettyIntegrationName` maps the canonical Bap integration slug to a client-readable label: `slack` → "Slack", `gmail` → "Gmail", `notion` → "Notion", `google-calendar` → "Google Calendar", `outlook` → "Outlook", `hubspot` → "HubSpot", `salesforce` → "Salesforce", `airtable` → "Airtable", `linear` → "Linear". Anything else passes through as-is with a capital first letter.
+
+The skill is idempotent on `(callId, "planned")`; re-running the orchestrator over the same callId does not repost. Append `notified.permalink` to the run state so Step 7 can cite it in the report.
+
+When `notified.verdict == "channel-not-found"`, log a warning in the report and continue; the orchestrator never blocks on the notifier.
 
 ## Step 3. Generate the skill folder per agent
 
@@ -551,6 +591,31 @@ When the agent supports an autonomous test path (auto-approve mode + a determini
 
 The test loop already does sandbox cleanup; nothing else to do here.
 
+## Step 6.5. Notify the client channel (validated coworkers)
+
+Once the test loop has resolved each agent to `live` or `needsReview`, post a follow-up "validated" status to the prospect's Slack channel via [bap-client-notify](../bap-client-notify/SKILL.md). This is the second and final client-facing message of the run; Step 7 writes the internal report to disk afterwards but does not post anywhere.
+
+Skip this step when `options.dryRun == true` OR when every agent ended in `needsReview` with no `live` (the skill itself short-circuits with `skipped-all-needsreview` in that case; logging the warning is enough).
+
+```
+notified = invoke bap-client-notify
+  phase: "validated"
+  prospect: spec.callMeta.prospect
+  callId:   spec.callMeta.callId
+  coworkers: [...live, ...needsReview].map(a => ({
+    name:      a.slug.startsWith("@") ? a.slug : "@" + a.slug,
+    objective: a.goal,
+    tools:     [],                                  // already shown in the planned post, omit here
+    panelUrl:  a.panelUrl,                          // heybap.com URL captured at Step 5
+    status:    a.verdict                            // "live" or "needsReview"
+  }))
+  options: { createIfMissing: true }
+```
+
+The skill is idempotent on `(callId, "validated")`. Append `notified.permalink` to the run state so Step 7 cites it in the report.
+
+When `notified.verdict == "channel-not-found"`, log a warning in the report and continue; the orchestrator never blocks on the notifier.
+
 ## Step 7. Consolidated report
 
 Emit one Markdown report to the human via the handoff channel and to disk at `${skillFolderRoot}/<callId>/report.md`:
@@ -596,9 +661,14 @@ ${noPriorArt ? "**First build of this shape; no prior anchor reused.**" : ""}
 - **BAP-${ticket.identifier}** ({simple|complex}) - ${finding.title}
   ${ticketUrl} (state: In Review | Triage)
   PR: ${prUrl}                       (only when SIMPLE; absent for COMPLEX brainstorms)
+
+## Client notifications
+- Planned post:   ${plannedPermalink}     (Slack #${plannedChannelName})
+- Validated post: ${validatedPermalink}   (Slack #${validatedChannelName})
+${createdClientChannel ? "**New channel created**: invite @baptiste / @louis manually from Slack if needed." : ""}
 ```
 
-This is the artefact a human reviews. Everything in the pipeline is auditable from this report. The "HeyBap findings dispatched" section consolidates the `feature-bug-complexity-classification` return values from every pipeline step; each entry maps one-to-one with a Linear ticket in team `Bap`.
+This is the artefact a human reviews. Everything in the pipeline is auditable from this report. The "HeyBap findings dispatched" section consolidates the `feature-bug-complexity-classification` return values from every pipeline step; each entry maps one-to-one with a Linear ticket in team `Bap`. The "Client notifications" section captures the two Slack posts the pipeline sent to the prospect's channel (planned + validated), or the warning when no channel could be resolved.
 
 ## Resume after human action
 

@@ -1,0 +1,10 @@
+slack:
+  workspace: "The Agentic Company"
+  channel_search_threshold: 0.5
+  channel_slug_prefix: "client-"
+  is_private_default: false
+  operator_user_id: "U0AT7378GSX"  # Lubin
+  manual_invite_reminder:
+    - "U0A87JNV8QP"  # Baptiste
+    - "U0A8M1B4962"  # Louis
+log_path: "~/HeyBap Pipeline/logs/client-notify.jsonl"
