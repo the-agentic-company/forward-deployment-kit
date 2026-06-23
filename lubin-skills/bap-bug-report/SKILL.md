@@ -442,9 +442,9 @@ Constraints:
 - Capture the `permalink` returned by `slack_send_message` and include it in the Step 12 return value as `slackPermalink`.
 - Slack: prefer the AFTER screenshot URL (the one that proves the fix lands). Include the BEFORE URL only if the contrast is what makes the message readable; otherwise keep the post tight.
 
-## Step 11 — watch CI, fix red, self-merge after green
+## Step 11 — watch CI, fix red until green
 
-Required for every PR opened by this skill.
+Required for every PR opened by this skill. The skill owns the green-up; never leave a red PR open for Baptiste to deal with.
 
 1. **Watch CI.** After the push, poll `gh pr checks <num>` until every check completes. The Bap CI runs oxlint, typecheck (`tsgo`), Fallow audit (CRAP / dead-code / dupes), gitleaks, react-doctor, and `bun run test:ci` (vitest unit + integration).
 
@@ -455,18 +455,9 @@ Required for every PR opened by this skill.
    - vitest failure → re-read Step 4, the fix is probably wrong.
    Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate.
 
-3. **When CI is green, self-merge.** Branch protection on `main` requires a PR but `enforce_admins = false`, so the operator (admin) can squash-merge their own PR:
-   ```bash
-   gh pr merge <num> --squash --delete-branch
-   ```
-   Squash is the team default (the repo allows squash + rebase, not merge commit). Branch deletion keeps the remote tidy.
+3. **When CI is green, stop here.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. The skill's contract ends at "PR opened, CI green, Slack #dev pinged Baptiste at Step 10." Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow. The Slack post from Step 10 is the handoff; Baptiste reviews + squash-merges from GitHub when he is ready.
 
-4. **After merge.** `release-main.yml` auto-deploys to STAGING on push to main. The operator triggers the manual `prod-release.yml` (`gh workflow run prod-release.yml -f ref=main`) when they decide to ship. Do not auto-trigger prod from this skill.
-
-5. **Post the merge confirmation as a thread reply** on the original Slack post (Step 10):
-   ```
-   Merged on `main` (commit `<merge-sha-short>`). Staging deploy auto-triggered; prod release stays on operator demand.
-   ```
+4. **Post-merge cleanup is owned by `bap-post-deploy-verify`**, not by this skill. Once Baptiste merges and the staging / prod deploy lands, the verifier reads the FINDING_CONTEXT off the Linear ticket and confirms the fix in prod. This skill exits at "CI green."
 
 ## Step 12 — return to the user
 
@@ -507,6 +498,8 @@ Use as sanity checks if the current bug sounds similar:
 - Do not pick the first plausible fix in Step 4. Enumerate 2 to 3 alternatives grounded in Step 3 and pick on the rubric (reuse > extend > additive > smallest surface). The "Alternatives considérées" section must be real, not retrofitted.
 - Do not introduce a new abstraction, hook, service, or file when Step 3 angle 1 returned an adjacent implementation. Reuse the adjacency or explain why it does not fit.
 - Do not edit a test to make it pass after the fix. A test break is evidence the fix is wrong; return to Step 4 and pick a different alternative.
+- Do not call `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The contract stops at "CI green + Slack #dev pinged Baptiste."
+- Do not trigger any deploy workflow (`release-main.yml`, `prod-release.yml`) from this skill. Deploys are owned by Baptiste post-merge.
 
 ## Config
 

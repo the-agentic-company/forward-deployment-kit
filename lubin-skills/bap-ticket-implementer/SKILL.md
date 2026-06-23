@@ -262,9 +262,9 @@ Screenshot rule: list every image attachment already on the Linear ticket (read 
 
 One message per PR. The `<@U…>` reviewer ping is required — it is the whole point of the post. On a re-implementation (loop tick later updating the same PR), reply in the thread of the original message rather than posting a new top-level message; the thread reply does NOT need to re-ping Baptiste.
 
-## Step 8.5 — watch CI, fix red, self-merge after green
+## Step 8.5 — watch CI, fix red until green
 
-Required for every PR opened or updated by this skill. The autonomous loop owns the green-up; never leave a red PR open for the operator to deal with.
+Required for every PR opened or updated by this skill. The autonomous loop owns the green-up; never leave a red PR open for Baptiste to deal with.
 
 1. **Watch CI.** Poll `gh pr checks <num>` until every check completes. The Bap CI runs oxlint, typecheck (`tsgo`), Fallow audit (CRAP / dead-code / dupes), gitleaks, react-doctor, and `bun run test:ci` (vitest unit + integration).
 
@@ -274,21 +274,11 @@ Required for every PR opened or updated by this skill. The autonomous loop owns 
    - typecheck error → match the existing signature.
    - vitest failure → the implementation is wrong; do NOT edit the test, return to Step 4 and pick a different angle.
 
-   Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate. If after 3 fix iterations the failure is genuinely architectural (e.g. requires a much larger refactor than the 120-line cap), halt the loop, post a Linear comment "CI failure not resolvable within the ticket's scope — escalating to operator", and exit. The PR stays open for the operator.
+   Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate. If after 3 fix iterations the failure is genuinely architectural (e.g. requires a much larger refactor than the 120-line cap), halt the loop, post a Linear comment "CI failure not resolvable within the ticket's scope — escalating to operator", and exit. The PR stays open for Baptiste to look at.
 
-3. **When CI is green, self-merge.** Operator (Lubin) is admin on the repo and `enforce_admins = false`, so the skill squash-merges its own PR:
-   ```bash
-   gh pr merge <num> --squash --delete-branch
-   ```
-   Squash is the team default. Branch deletion keeps the remote tidy.
+3. **When CI is green, stop here.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. The skill's contract ends at "PR opened or updated, CI green, Slack #dev pinged Baptiste at Step 8." Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow. Baptiste reviews and squash-merges from GitHub when he is ready.
 
-4. **After merge.** `release-main.yml` auto-deploys to STAGING on push to main. Prod release stays manual (operator triggers `prod-release.yml` from GitHub UI when they decide). Do not auto-trigger prod from this skill.
-
-5. **Reply in the Slack thread** of the Step 8 post:
-   ```
-   Merged on `main` (commit `<merge-sha-short>`). Staging deploy auto-triggered.
-   ```
-   No new @mention on the reply.
+4. **Post-merge cleanup is owned by `bap-post-deploy-verify`**, not by this skill. Once Baptiste merges and the deploy lands, the verifier reads the FINDING_CONTEXT off the Linear ticket and confirms the fix in prod.
 
 ## Step 9 — return to caller / log
 
@@ -333,6 +323,8 @@ The cap of 5 implementations per tick prevents a runaway loop from carpet-bombin
 - Forgetting the `Screenshots:` line when the ticket has image attachments. Slack auto-unfurls Linear asset URLs, so citing them gives Baptiste the repro evidence inline instead of forcing a Linear roundtrip.
 - Re-implementing a ticket whose PR is already open and CI-green. Check the existing PR first; if it solves the ticket, comment and stop, do not duplicate.
 - Forgetting the FINDING_CONTEXT downstream contract. `bap-post-deploy-verify` reads it from the Linear ticket; if it is missing, fail eligibility instead of generating one (would lose the original signal).
+- Calling `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The autonomous loop stops at "CI green + Slack #dev pinged."
+- Triggering any deploy workflow (`release-main.yml`, `prod-release.yml`). Deploys are owned by Baptiste post-merge.
 
 ## Config
 
