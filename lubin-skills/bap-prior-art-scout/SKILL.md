@@ -23,7 +23,7 @@ description: |
 
 When Lubin builds a new HeyBap coworker, there is almost always a previous build that solves part of the same problem: a render pattern, a panel layout, an MCP for an external service, a skill prompt structure, a sandbox CLI fallback. Reinventing is the failure mode this skill prevents. The first build of any shape (PDF by email, audio transcription, calendar sync, SEO publishing) does the hard work; subsequent builds should anchor on it.
 
-This skill is the mirror of `bap-capability-impact-analyzer` but for the **creation** side: where the analyzer asks "should we build this and how big is it", this scout asks "have we already built something close enough to copy from".
+This skill lives on the **creation** side of the pipeline: it asks "have we already built something close enough to copy from" before any scaffolding starts.
 
 ## When to invoke
 
@@ -250,4 +250,3 @@ Each operator forks the config to match their own paths if their vault / code la
 - [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md): primary consumer at Step 1.5.
 - [parse-transcript-to-agent-spec](../parse-transcript-to-agent-spec/SKILL.md): can call this skill in Step 5 to verify "custom MCP needed" before committing to building one.
 - [build-agents-for-bap](../build-agents-for-bap/SKILL.md): rule on preferring reuse over reinvention.
-- [bap-capability-impact-analyzer](../bap-capability-impact-analyzer/SKILL.md): the mirror skill for the analysis side (what to *fix or build new*, not what to *reuse*).

@@ -1,0 +1,31 @@
+linear:
+  team_key: "BAP"
+  team_id: "5ff3b86a-a1a5-4241-ac5c-e65a143f16e3"
+  assignee_username: "lubin"
+  trigger_label: "agent-autonomous"
+  refresh_label: "needs-refresh"
+  statuses:
+    triage: "b63fe240-0351-4011-a754-3b69c3cc5c99"
+    in_progress: "2494a4a4-9b9a-4cff-a4b6-91d499dcf4d2"
+    in_review: "423d89b9-126c-4db1-aa27-05b25baafd20"
+  reviewer_user_id: "b05ce629-639d-4861-8de0-c2ba17ce84a6"  # Baptiste — Linear reassign target when the PR opens (Step 7)
+slack:
+  workspace: "The Agentic Company"
+  pr_channel_id: "C0BCH5L6PQS"      # #pr-lubin — resolved at runtime via slack_search_channels({ query: "pr-lubin" }) if missing
+  review_user_id: "U0A87JNV8QP"     # Baptiste (CTO, reviewer) — pinged on Step 8 PASS / SKIPPED variants
+  operator_user_id: "U0AT7378GSX"   # Lubin (operator) — pinged on Step 8 FAILED variant when Chrome MCP verify KO
+local_dev:
+  bap_main_checkout: "/Users/lubin.danilo/bap/bap"   # operator's checkout serving the dev server; Step 6.5 swaps branches here
+  dev_server_url: "http://localhost:3000"            # probe target + Chrome MCP navigate target
+  hmr_wait_seconds: 5                                # post-swap delay for Next.js HMR to recompile
+  max_verify_iterations: 3                           # outer loop cap (Step 5 + 6 + 6.5): tries up to N alternatives before exhausting to FAILED
+github:
+  repo: "the-agentic-company/bap"
+  branch_prefix: "fix/bap-"
+  pr_label: "autonomous-implementation"
+limits:
+  cadence_minutes: 30
+  max_lines_per_commit: 120
+  max_implementations_per_tick: 5
+  confidence_floor: 0.7
+log_path: "~/HeyBap Pipeline/logs/ticket-implementer.jsonl"

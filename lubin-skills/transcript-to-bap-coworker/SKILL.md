@@ -1,19 +1,25 @@
 ---
 name: transcript-to-bap-coworker
 description: |
-  Meta-skill that turns a sales / discovery / kickoff call transcript into one
-  or several deployed and tested Bap (Heybap) coworkers, with all assets:
-  agent prompt, SKILL.md, render scripts, `/app/output.html` template with
-  interactive postMessage buttons, custom MCP server(s) when needed,
-  workspace wiring, and a closed-loop test pass. Chains
-  `parse-transcript-to-agent-spec`, `build-mcp-for-bap`, `build-agents-for-bap`,
-  and `bap-coworker-test-loop` into a single pipeline. Use when a transcript
-  arrives and the goal is "walk out of the call with the agents already live".
+  Meta-skill that turns a sales / discovery / kickoff call transcript (or a
+  free-form operator brief) into one or several deployed and tested Bap
+  (Heybap) coworkers, with all assets: agent prompt, SKILL.md, render
+  scripts, `/app/output.html` template with interactive postMessage
+  buttons, custom MCP server(s) when needed, workspace wiring, and a
+  closed-loop test pass. Pipeline stages it chains: `parse-transcript-to-
+  agent-spec`, `bap-prior-art-scout`, `bap-platform-feasibility-check`,
+  `bap-coworker-test-loop`. Reference patterns it APPLIES while
+  scaffolding (read before generation, NOT chained as separate stages):
+  `build-mcp-for-bap` (HTTP MCP playbook), `build-agents-for-bap` (coworker
+  rule set, 24 rules), `build-mini-apps-for-bap` (panel + external backend
+  pattern when `miniApp.needed = true`). Use when a transcript or brief
+  arrives and the goal is "walk out of the call with the agents already
+  live".
 ---
 
 # Transcript to deployed Bap coworker, end to end
 
-The aspiration: a call ends, the transcript hits Grain, and within a few minutes the proposed coworkers are running on Bap, tested against the success criteria the prospect actually stated. This skill is the orchestrator that makes that real. It does not do the work itself; it chains the four other skills in this folder in the right order, surfaces the unavoidable human checkpoints, and produces a single report at the end.
+The aspiration: a call ends, the transcript hits Grain, and within a few minutes the proposed coworkers are running on Bap, tested against the success criteria the prospect actually stated. This skill is the orchestrator that makes that real. It does not do the work itself; it chains the pipeline stages (parser, prior-art scout, feasibility check, test loop) in the right order, **applies the patterns from the three reference skills (`build-mcp-for-bap`, `build-agents-for-bap`, `build-mini-apps-for-bap`) when scaffolding — those are docs/playbooks consulted before generation, not separate pipeline stages** — surfaces the unavoidable human checkpoints, and produces a single report at the end.
 
 It is the top of the dependency chain. Nothing else in `lubin-skills/` calls it.
 
@@ -68,11 +74,20 @@ Do not invoke when:
                               |
                               v
                 +-----------------------------+
+                |  bap-client-notify (planned)|--> Slack client channel:
+                |  (after step 1, before 3)   |    "coworkers planifiés + outils"
+                |  bap-client-notify (validated)   "coworkers en place + URLs"
+                |  (after step 5)             |
+                +-----------------------------+
+                              |
+                              v
+                +-----------------------------+
                 |  consolidated report:       |
                 |  - @username per agent      |
                 |  - status (live / handoff)  |
                 |  - test artefacts links     |
                 |  - human checkpoints open   |
+                |  - client notification links|
                 +-----------------------------+
 ```
 
@@ -197,6 +212,44 @@ For each item in `agent.neededTools`:
 | `sandbox_cli` | No wiring; the agent prompt will reference the CLI per rule #16 of `build-agents-for-bap`. |
 | `custom_mcp_to_build` | **First check `priorArt.matches` for an existing MCP** (vault project with `mcp-handler` in `package.json`, or a workspace MCP already deployed). If found: downgrade to `existing_workspace_mcp` if the workspace MCP id is known, or re-deploy the vault project (no rebuild from scratch). Only trigger [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md) (Step 2b) when no prior MCP fits. |
 
+### Step 2c. Detect mini-app shape (live / stateful / multi-user)
+
+For each agent, inspect `spec.agents[*].outputs[*]` for signals that the artefact is not a one-shot HTML page but a **live mini-app** (the `/app/output.html` becomes a shell into a long-running external backend). Trigger shapes:
+
+- live updates / real-time / SSE / streaming dashboard
+- multi-user collaboration / shared session / room
+- live transcript / live copilot / call assistant
+- queue / job status / progress poller
+- mutable state the user edits in the panel and that must persist across runs
+
+When any trigger applies, the agent needs `build-mini-apps-for-bap` (the third tool-layer skill alongside `build-mcp-for-bap` and `build-agents-for-bap`). Add a `miniApp` block to the agent's `toolPlan`:
+
+```
+toolPlan.miniApp = {
+  needed: true,
+  pattern: "live-copilot | dashboard | progress-poller | multi-user-room | mutable-state",
+  referenceBuild: "heybap-live-copilot",   // or another vault project from priorArt
+  backendKind: "vercel-next | fly | cloudflare-workers",
+  needsBackend: true                       // false only when the panel is fully self-contained (rare)
+}
+```
+
+The orchestrator then runs Step 2d (next) instead of jumping to Step 3.
+
+### Step 2d. Scaffold the mini-app backend when needed
+
+If `toolPlan.miniApp.needed == true`:
+
+1. Invoke [build-mini-apps-for-bap](../build-mini-apps-for-bap/SKILL.md) with the agent spec + the chosen pattern. Reference build is `vault/projects/heybap-live-copilot/` (or whatever the prior-art scout returned for this output shape).
+2. Scaffold the external backend (Vercel + Next.js + KV / pub-sub) following the patterns in the skill.
+3. Deploy with `vercel deploy --prod --yes`, capture the `live_url` template (typically `https://<project>.vercel.app/session/<session_id>`).
+4. Add an MCP tool `start_session` (or equivalent) that the agent calls at run start to mint a session and return the live URL. Wire this MCP via Step 2b's HUMAN STOP if it's a new workspace MCP.
+5. Step 3's skill folder generation then emits a `render.py` that opens `/app/output.html` with the `<live_url>` baked in, plus the HTML scaffold that opens the `EventSource` and posts user actions back via `fetch`.
+
+If the prior-art scout already returned a vault project that fits (typically `heybap-live-copilot` for live-copilot patterns), the scaffold reuses that project's backend rather than starting fresh; the new agent gets its own session route on the existing deployment.
+
+If no mini-app signals are detected, skip to Step 3 directly.
+
 ### Step 2b. Build custom MCP when needed
 
 When `customMcpsToBuild` is non-empty, for each entry:
@@ -225,6 +278,37 @@ When done, paste the workspaceMcpServerId here (or accept the auto-detect prompt
 Auto-detect heuristic: once the human acks, the orchestrator calls `mcp__bap__coworker_list`, picks the most recently created coworker with this MCP wired (a reference seed coworker can be created for this purpose), and reads the id. Caching the result avoids repeating the human step for the next agents in the batch.
 
 Persist the id to `${skillFolderRoot}/<callId>/mcps.json` so the test loop can wire later coworkers without re-asking.
+
+## Step 2.5. Notify the client channel (planned coworkers)
+
+Before any code generation or deployment, post a "planned" status to the prospect's Slack channel via [bap-client-notify](../bap-client-notify/SKILL.md). This gives the team a heads-up of what is about to be built and what integrations each coworker will use.
+
+Skip this step when `options.dryRun == true` or when every surviving agent ended up in `notBuilt` (nothing to announce).
+
+```
+notified = invoke bap-client-notify
+  phase: "planned"
+  prospect: spec.callMeta.prospect
+  callId:   spec.callMeta.callId
+  coworkers: agents.map(a => ({
+    name:      a.slug.startsWith("@") ? a.slug : "@" + a.slug,
+    objective: a.goal,                             // one-liner from the spec, plain French
+    tools:     [
+      ...a.toolPlan.nativeIntegrations.map(prettyIntegrationName),
+      ...a.toolPlan.existingWorkspaceMcps.map(m => m.displayName),
+      ...a.toolPlan.sandboxClis.map(c => c + " (sandbox)"),
+      ...a.toolPlan.customMcpsToBuild.map(m => m.name + " (sur mesure)"),
+      ...(a.toolPlan.miniApp ? ["Mini-app interactive"] : [])
+    ]
+  }))
+  options: { createIfMissing: true }
+```
+
+`prettyIntegrationName` maps the canonical Bap integration slug to a client-readable label: `slack` → "Slack", `gmail` → "Gmail", `notion` → "Notion", `google-calendar` → "Google Calendar", `outlook` → "Outlook", `hubspot` → "HubSpot", `salesforce` → "Salesforce", `airtable` → "Airtable", `linear` → "Linear". Anything else passes through as-is with a capital first letter.
+
+The skill is idempotent on `(callId, "planned")`; re-running the orchestrator over the same callId does not repost. Append `notified.permalink` to the run state so Step 7 can cite it in the report.
+
+When `notified.verdict == "channel-not-found"`, log a warning in the report and continue; the orchestrator never blocks on the notifier.
 
 ## Step 3. Generate the skill folder per agent
 
@@ -507,6 +591,31 @@ When the agent supports an autonomous test path (auto-approve mode + a determini
 
 The test loop already does sandbox cleanup; nothing else to do here.
 
+## Step 6.5. Notify the client channel (validated coworkers)
+
+Once the test loop has resolved each agent to `live` or `needsReview`, post a follow-up "validated" status to the prospect's Slack channel via [bap-client-notify](../bap-client-notify/SKILL.md). This is the second and final client-facing message of the run; Step 7 writes the internal report to disk afterwards but does not post anywhere.
+
+Skip this step when `options.dryRun == true` OR when every agent ended in `needsReview` with no `live` (the skill itself short-circuits with `skipped-all-needsreview` in that case; logging the warning is enough).
+
+```
+notified = invoke bap-client-notify
+  phase: "validated"
+  prospect: spec.callMeta.prospect
+  callId:   spec.callMeta.callId
+  coworkers: [...live, ...needsReview].map(a => ({
+    name:      a.slug.startsWith("@") ? a.slug : "@" + a.slug,
+    objective: a.goal,
+    tools:     [],                                  // already shown in the planned post, omit here
+    panelUrl:  a.panelUrl,                          // heybap.com URL captured at Step 5
+    status:    a.verdict                            // "live" or "needsReview"
+  }))
+  options: { createIfMissing: true }
+```
+
+The skill is idempotent on `(callId, "validated")`. Append `notified.permalink` to the run state so Step 7 cites it in the report.
+
+When `notified.verdict == "channel-not-found"`, log a warning in the report and continue; the orchestrator never blocks on the notifier.
+
 ## Step 7. Consolidated report
 
 Emit one Markdown report to the human via the handoff channel and to disk at `${skillFolderRoot}/<callId>/report.md`:
@@ -552,9 +661,14 @@ ${noPriorArt ? "**First build of this shape; no prior anchor reused.**" : ""}
 - **BAP-${ticket.identifier}** ({simple|complex}) - ${finding.title}
   ${ticketUrl} (state: In Review | Triage)
   PR: ${prUrl}                       (only when SIMPLE; absent for COMPLEX brainstorms)
+
+## Client notifications
+- Planned post:   ${plannedPermalink}     (Slack #${plannedChannelName})
+- Validated post: ${validatedPermalink}   (Slack #${validatedChannelName})
+${createdClientChannel ? "**New channel created**: invite @baptiste / @louis manually from Slack if needed." : ""}
 ```
 
-This is the artefact a human reviews. Everything in the pipeline is auditable from this report. The "HeyBap findings dispatched" section consolidates the `feature-bug-complexity-classification` return values from every pipeline step; each entry maps one-to-one with a Linear ticket in team `Bap`.
+This is the artefact a human reviews. Everything in the pipeline is auditable from this report. The "HeyBap findings dispatched" section consolidates the `feature-bug-complexity-classification` return values from every pipeline step; each entry maps one-to-one with a Linear ticket in team `Bap`. The "Client notifications" section captures the two Slack posts the pipeline sent to the prospect's channel (planned + validated), or the warning when no channel could be resolved.
 
 ## Resume after human action
 

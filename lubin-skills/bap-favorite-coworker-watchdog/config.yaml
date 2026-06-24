@@ -1,0 +1,16 @@
+slack:
+  workspace: "The Agentic Company"
+  prod_channel_id: "REPLACE_WITH_AGENTS_PRODUCTION_CHANNEL_ID"
+  lubin_user_id: "U0AT7378GSX"
+  baptiste_user_id: "U0A87JNV8QP"
+  # louis_user_id intentionally omitted — Louis Adam must never be tagged by this workflow
+bap:
+  list_limit: 100
+  runs_lookback_hours: 24
+  full_log_concurrency: 8
+  min_runs_for_median: 10
+  slow_run_multiplier: 5
+classification_gate: "feature-bug-complexity-classification"
+escalation:
+  consecutive_ticks_before_mention: 3
+log_path: "~/HeyBap Pipeline/logs/watchdog.jsonl"

@@ -262,4 +262,3 @@ automation_tools_to_check:
 - [parse-transcript-to-agent-spec](../parse-transcript-to-agent-spec/SKILL.md): primary upstream invoker.
 - [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md): orchestrator chains prior-art + feasibility before generation.
 - [build-mcp-for-bap](../build-mcp-for-bap/SKILL.md): refuses to scaffold without a feasibility green light.
-- [bap-capability-impact-analyzer](../bap-capability-impact-analyzer/SKILL.md): the analysis-side complement for capability gaps inside HeyBap itself.

@@ -1,0 +1,23 @@
+linear:
+  team_id: "5ff3b86a-a1a5-4241-ac5c-e65a143f16e3"
+  team_key: "BAP"
+  default_project_id: null
+  default_assignee_user_id: "b05ce629-639d-4861-8de0-c2ba17ce84a6"  # Baptiste (CTO)
+  baptiste_user_id: "b05ce629-639d-4861-8de0-c2ba17ce84a6"
+  # louis_user_id intentionally omitted — Louis Adam must never be tagged by this workflow
+  lubin_user_id: "8fc555af-50cd-4093-9878-92f6f08e6d96"
+  labels:
+    bug: "e356eade-cc41-4abb-9447-00487b30583c"
+    feature: "296529af-3672-4bd7-876d-64245d40c768"
+    need_more_shaping: "aec20ab1-873c-400c-9466-747706a58b1d"
+    dogfooding: "50b28f0f-60be-460d-9db1-bd2e03e79f42"
+    ui_ux: "848839d8-15da-440a-96e1-02e725dc153d"
+  statuses:
+    triage: "b63fe240-0351-4011-a754-3b69c3cc5c99"
+    in_progress: "2494a4a4-9b9a-4cff-a4b6-91d499dcf4d2"
+github_repo: "the-agentic-company/bap"
+slack:
+  workspace: "The Agentic Company"
+  pr_channel_id: "C0BCH5L6PQS"      # #pr-lubin — resolved at runtime via slack_search_channels({ query: "pr-lubin" }) if missing
+  review_user_id: "U0A87JNV8QP"     # Baptiste (CTO, reviewer) — resolved via slack_search_users({ query: "Baptiste" }) if missing
+investigation_time_cap_minutes: 15

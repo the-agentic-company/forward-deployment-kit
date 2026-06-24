@@ -129,7 +129,7 @@ Output at the end, in this exact shape:
 2. The list of @username coworkers that landed live.
 3. The list of agents that need a human stop (with the stop reason).
 4. The list of PRs opened on the-agentic-company/bap during this run.
-5. The list of Linear tickets created during this run (one block per ticket: BAP-<n>, URL, state In Review for SIMPLE or Triage for COMPLEX, label set, assignee). For COMPLEX feature gaps, mention that the brainstorm ticket carries an Impact section produced by bap-capability-impact-analyzer (use cases unlocked, t-shirt size, verdict).
+5. The list of Linear tickets created during this run (one block per ticket: BAP-<n>, URL, state In Review for SIMPLE or Triage for COMPLEX, label set, assignee). For COMPLEX feature gaps, mention that the brainstorm ticket carries an Impact section produced by the brainstorm's Step 3b (use cases unlocked, t-shirt size, verdict).
 EOF
 )
 
