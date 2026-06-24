@@ -24,6 +24,17 @@ Field-tested skills contributed by [Lubin Danilo](https://github.com/lubindanilo
 | [`bap-ticket-implementer`](bap-ticket-implementer/SKILL.md) | Autonomous loop that drains Linear tickets assigned to Lubin with label `agent-autonomous`. Reads description + comments + linked PR, runs the same 5-subagent deep-research pass as `bap-bug-report` (to confirm the fix is still applicable today), implements ≤ 120 lines on a branch, opens or updates the PR, comments the ticket with the SHA, and posts a one-liner in Slack `#pr-lubin`. Refuses on ambiguous / large / stale tickets. `/loop 30m`. |
 | [`bap-favorite-coworker-watchdog`](bap-favorite-coworker-watchdog/SKILL.md) | Continuous watchdog over the operator's PRODUCTION coworkers (those marked favorite via `mcp__bap__coworker_setFavorite`). On each tick, lists favorites, pulls recent runs + logs, applies 5 anomaly checks (terminal failure, silent output drift, missing tool_use vs contract, drastic slowdown, missed schedule). Coworker-side anomalies → Slack `#agents-production`. Platform-side → Linear via `feature-bug-complexity-classification`. `/loop 60m`, escalates to @lubin on 3rd consecutive same-anomaly tick. |
 
+## Local adapters
+
+The canonical Phase entrypoints live in `lubin-skills/phase-1` and
+`lubin-skills/phase-2`. Runtime-specific shortcuts should point back here
+instead of duplicating workflow text.
+
+- Codex global skills: symlink `~/.agents/skills/phase-1` and
+  `~/.agents/skills/phase-2` to the matching `lubin-skills/phase-*` folders.
+- Claude slash commands: symlink `~/.claude/commands/phase-1.md` and
+  `~/.claude/commands/phase-2.md` to `.claude/commands/phase-*.md`.
+
 ## How they relate
 
 ```
