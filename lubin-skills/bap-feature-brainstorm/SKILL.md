@@ -176,43 +176,15 @@ Example: `(Brainstorm) Web: programmatic workspace MCP server bind`.
 **Description** (mandatory blocks):
 
 ```markdown
-**Status : à arbitrer par l'équipe.** Baptiste, choisir une des 3 options (ou en proposer une 4e).
+**Status : à arbitrer par l'équipe.**
 
 @baptiste @lubin
 
 ## Contexte
 <2-3 lignes : le besoin observé (forward deployment, retour client, gap du pipeline FDK) et la surface HeyBap concernée>
 
-## Pourquoi pas trivial
-<1-2 lignes : ce qui fait qu'on ne peut pas juste ouvrir une PR. Multi-surface, design choice, data model, scaling, security>
-
-## Impact si implémenté
-<feature gaps uniquement, voir Step 3b ; omettre cette section pour les bugs structurels>
-
 **Use cases débloqués (${unlockedCount})**
 - ${use_case_1} (évidence : ${ref}, workaround actuel : ${workaround})
-- ${use_case_2} ...
-
-**Effort estimé** : ${tShirtSize} (~${linesChanged} lignes, surfaces : ${surfacesAffected}), confiance ${confidence}
-
-**Recommandation** : ${verdict} ; ${rationale}
-
-## 3 options envisagées
-
-### 1. <Nom option 1 (noun phrase)>
-- Comment : <1 ligne technique, file:line si pertinent>
-- Trade-off : <1 ligne, le coût réel>
-
-### 2. <Nom option 2>
-- Comment : <1 ligne>
-- Trade-off : <1 ligne>
-
-### 3. <Nom option 3>
-- Comment : <1 ligne>
-- Trade-off : <1 ligne>
-
-## Question équipe
-<Une question concrète, formulée comme un choix qui appelle une décision. Pas "qu'en pensez-vous", oui "on choisit 1, 2 ou 3 ? Si autre, lequel ?">
 ```
 
 Mentions: the `@baptiste` `@lubin` line at the top of the description triggers Linear notifications for both. **Never mention `@louis`** — Louis Adam must not be tagged in any ticket or message produced by this workflow, regardless of whether the finding touches UI / chat / coworker output / panel rendering. Use Linear's `@displayName` syntax exactly as written, no brackets, no email; the MCP description for `save_issue` specifies this format.

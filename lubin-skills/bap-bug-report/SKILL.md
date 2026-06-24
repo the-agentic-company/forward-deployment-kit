@@ -219,7 +219,7 @@ mcp__linear__save_issue({
 **Status : PR ouverte, à review + merge par Baptiste.**
 
 **Symptôme** : <une ligne en langue produit, ce que voit l'utilisateur>
-**Fix** : <une ligne + file:line touché>
+**Fix** : <ce qui a été modifié>
 
 <!-- FINDING_CONTEXT
 {
@@ -488,27 +488,6 @@ Closes BAP-<n>
 
 ## Ce que fait cette PR
 <1 paragraphe + file:line touché ; référencer le pattern adjacent réutilisé (Step 3 angle 3) si applicable>
-
-## Fix durable (pas dans cette PR)
-<la propriété structurelle à viser plus tard, ou "—" si rien>
-
-## Alternatives considérées (3 max)
-- <option 1> : <trade-off + raison de ne pas l'avoir choisie>
-- <option 2> : <trade-off + raison>
-- <option 3 (si applicable)> : <trade-off + raison>
-
-## Callers vérifiés (regression check)
-- <file:line> : <contrat préservé | contrat modifié, mitigation = …>
-
-## Tests dans la zone
-- <test:line> : verrouille <behaviour>
-- test gap : <surface non couverte> (si aucun test)
-
-## Repro
-<une ligne : où cliquer dans https://heybap.com>
-
-## Régression connue
-<commit hash + subject si trouvé via Step 3 angle 5, sinon "non identifié">
 EOF
 )"
 ```
