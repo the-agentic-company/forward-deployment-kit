@@ -82,7 +82,7 @@ A finding is **SIMPLE** if and only if EVERY criterion in the grid below is true
 | Criterion | Threshold for SIMPLE |
 |-----------|----------------------|
 | Lines changed by the proposed fix | < 50 |
-| Files touched by the proposed fix | <= 2 |
+| Files touched by the proposed fix | <= 3 |
 | Migration of the DB or state model required | no |
 | Breaking change to an exported API (orpc routers, MCP tools, db schema exports) | no |
 | Touches `packages/db/src/schema/*` data model definitions | no |
