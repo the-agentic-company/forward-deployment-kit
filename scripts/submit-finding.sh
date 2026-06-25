@@ -10,8 +10,8 @@
 # `feature-bug-complexity-classification`. That skill runs the 5-minute
 # investigation, the dedup, the classification grid, and dispatches to
 # `bap-bug-report` (SIMPLE) or `bap-feature-brainstorm` (COMPLEX) which
-# creates the Linear ticket and (for SIMPLE) opens the PR. SIMPLE findings
-# must wait for green GitHub CI before creating Linear tickets or posting Slack.
+# opens the PR (SIMPLE) or creates the brainstorm artifact (COMPLEX). No Linear
+# ticket is created for SIMPLE findings — only COMPLEX findings get a ticket.
 #
 # Usage:
 #   submit-finding.sh bug "Sandbox cache miss: coworker_run is 8s instead of 800ms"
@@ -94,7 +94,7 @@ Run the gate's full flow without asking for confirmation:
 3. Clarification gate: if the surface is localized, the likely fix is small, and the only blocker is operator intent (for example exact UI placement or label wording), return \`needs-clarification\` with one concise question instead of dispatching as COMPLEX-SCOPED.
 4. Classification on the 12-criterion grid (SIMPLE vs COMPLEX), after the clarification gate. Default to COMPLEX only when the clarification gate does not apply.
 5. Dispatch:
-   - SIMPLE → \`bap-bug-report\` runs its own 5-subagent deep research, opens the PR, watches GitHub CI until green, then creates the Linear ticket at status In Review (label Bug or Feature + Dogfooding, assignee Baptiste) and posts the Slack review handoff. If CI is red or pending, it must not create the Linear ticket or send Slack.
+   - SIMPLE → \`bap-bug-report\` runs its own 5-subagent deep research, opens the PR (targeting main), watches GitHub CI until green, and posts the Slack review handoff. No Linear ticket is created for SIMPLE findings.
    - COMPLEX → \`bap-feature-brainstorm\` produces problem + 3 options + decision question, creates the Linear ticket at status Triage (label Need More Shaping + Bug or Feature + Dogfooding, assignee Baptiste). For capability gaps, Step 3b inside the brainstorm quantifies impact (Grain corpus + past builds + use cases unlocked + verdict) and the ticket carries an Impact section.
 
 Do not stop to ask for permission on any tool call. The .claude/settings.json in this repo pre-approves every tool the gate needs.
@@ -104,7 +104,7 @@ Output at the end, in this exact shape:
 2. The classification (kind + complexity).
 3. The downstream skill invoked.
 4. The clarification question if the verdict is needs-clarification.
-5. The Linear ticket identifier and URL (e.g. BAP-127, https://linear.app/heybap/issue/BAP-127), only after green CI for SIMPLE.
+5. The Linear ticket identifier and URL (e.g. BAP-127, https://linear.app/heybap/issue/BAP-127) — only for COMPLEX findings.
 6. The PR URL if a PR was opened.
 7. A one-sentence summary suitable for the dashboard.
 EOF
