@@ -9,12 +9,12 @@ description: |
   enumerates 2 to 3 grounded alternatives and picks the one that
   minimises new code (reuse existing abstractions, no new files,
   additive over contract-modifying). Then implements the smallest fix
-  on a branch, opens a Pull Request, and creates a Linear ticket in
-  team `Bap` (key BAP) at status `In Review`, labelled `Bug` (or
-  `Feature`) + `Dogfooding`, assigned to the operator (Lubin), with the
-  PR attached as a link. Then posts a structured message in Slack `#pr-lubin`
-  with the original problem, the fix applied, and an `@Baptiste` ping
-  asking for review. Use when the user
+  on a branch, opens a Pull Request, watches GitHub CI until it is green,
+  and only then creates the Linear ticket in team `Bap` (key BAP) at
+  status `In Review`, labelled `Bug` (or `Feature`) + `Dogfooding`, with
+  the PR attached as a link. After the ticket exists and CI is green, it
+  posts a structured message in Slack `#pr-lubin` with the original
+  problem, the fix applied, and an `@Baptiste` ping asking for review. Use when the user
   describes a bug or feature gap in Bap / HeyBap (chat, coworker output,
   attachments, MCP, skills UI, run flow…) and wants the best-shaped fix
   proposed as a PR + a tracked Linear ticket without manual copy-paste.
@@ -30,9 +30,9 @@ description: |
 
 # Bap bug / feature → PR + Linear ticket
 
-Goal: the user gives a short one-line bug or feature description; you investigate the Bap codebase in depth; you **create a Linear ticket in team `Bap` first to obtain its identifier (e.g. `BAP-123`), then implement the fix on a branch in `the-agentic-company/bap`, open a Pull Request that references the ticket identifier in its title, and update the Linear ticket to status `In Review` with the PR attached as a link**.
+Goal: the user gives a short one-line bug or feature description; you investigate the Bap codebase in depth; you implement the fix on a branch in `the-agentic-company/bap`, open a Pull Request, and **watch GitHub CI until every check is green before creating any Linear ticket or sending any Slack notification**. Only after CI is green do you create the Linear ticket in team `Bap`, attach the PR, update the PR title/body with the ticket identifier when needed, and post the Slack handoff.
 
-The Linear ticket is the durable report. A follow-up `#pr-lubin` Slack message restates the problem, summarises the fix, and pings Baptiste so the review request lands in his Slack inbox (the surface he watches).
+The Linear ticket is the durable report, but SIMPLE findings are not ticketed until the PR has passed CI. The follow-up `#pr-lubin` Slack message is also gated on green CI; it restates the problem, summarises the fix, and pings Baptiste so the review request lands in his Slack inbox only when the PR is ready to merge.
 
 ## Repo & context (always)
 
@@ -48,9 +48,10 @@ The Linear ticket is the durable report. A follow-up `#pr-lubin` Slack message r
     2. **Coworker run output** (`apps/web/src/routes/agents/-components/coworker-info-panels.tsx`) + the prototype variant `apps/web/src/routes/prototype/coworker/info/-components/coworker-info-prototype.tsx`.
   - MIME validation for skill / coworker documents: `apps/web/src/server/storage/validation.ts` (separate from chat attachments).
   - Sandbox file limit: `packages/core/src/server/services/sandbox-file-service.ts`.
-- PR conventions on this repo (look at recent merged PRs to confirm):
-  - Title format: `<Area>: <verb> <object>` (e.g. `Web: fix coworker builder chat scrolling`, `Sandbox: fix coworker APP_URL sync`, `Skills: enable imports by default`). With this skill the title is prefixed with the Linear identifier: `BAP-123 Web: fix coworker builder chat scrolling`.
-  - Branch format: `fix/<slug>` for bugs, `feat/<slug>` for features, with the Linear identifier in the slug: `fix/bap-123-chat-scrolling`. Linear's GitHub integration auto-detects either form.
+  - PR conventions on this repo (look at recent merged PRs to confirm):
+  - Initial title format before CI: `<Area>: <verb> <object>` (e.g. `Web: fix coworker builder chat scrolling`, `Sandbox: fix coworker APP_URL sync`, `Skills: enable imports by default`).
+  - After CI is green and the Linear ticket exists, update the PR title to prefix the Linear identifier: `BAP-123 Web: fix coworker builder chat scrolling`.
+  - Branch format before ticket creation: `fix/<short-slug>` for bugs, `feat/<short-slug>` for features. Do not invent a fake `BAP-<n>` before Linear returns the real identifier.
   - Default branch is `main`.
 
 ## Step 1 — get a fresh local clone
@@ -193,9 +194,11 @@ Produce:
 - **Implications**: which other surfaces / hooks / constants get touched, migration concerns, data impact.
 - **Regression risk**: for each caller from Step 3 angle 2, one line stating "no change to contract" or "contract changes in this way; mitigated by …". If any caller is *not* covered by an existing test, flag it as `test gap`.
 
-## Step 6 — create the Linear ticket
+## Step 6 — prepare the deferred Linear ticket
 
-The ticket is created **before** the branch and PR so its identifier can be embedded in branch name + PR title and Linear's GitHub integration auto-attaches the PR.
+Do **not** create the Linear ticket yet. SIMPLE ticket creation is intentionally deferred until the PR has passed GitHub CI. At this step, prepare the exact ticket title, description, labels, screenshots, and `FINDING_CONTEXT` payload in memory or in the run notes so Step 10 can create the ticket after CI is green.
+
+The ticket will be created in Step 10 with this payload:
 
 ```
 mcp__linear__save_issue({
@@ -248,9 +251,9 @@ The `FINDING_CONTEXT` block is **mandatory** and stays embedded in the ticket de
 
 If the finding was passed to you with a pre-computed `hash`, use it verbatim. Otherwise compute it as `sha256(kind + "|" + title + "|" + first_code_ref_or_run_id)` so two findings on the same root cause produce the same hash.
 
-Capture the ticket identifier (`BAP-<n>`) and URL (`https://linear.app/heybap/issue/BAP-<n>`) returned by `save_issue`. You will use both in the next steps.
+Do not call `save_issue` in Step 6. Capture the ticket identifier (`BAP-<n>`) and URL (`https://linear.app/heybap/issue/BAP-<n>`) only in Step 10, after CI is green.
 
-**Attach every screenshot in `evidence.screenshots` to the ticket.** For each local file path captured in Step 2 (or provided by the user in chat), run:
+Prepare to attach every screenshot in `evidence.screenshots` to the ticket after Step 10 creates it. For each local file path captured in Step 2 (or provided by the user in chat), keep the path stable:
 
 ```
 upload  = mcp__linear__prepare_attachment_upload({ issueId: "<ticket uuid>", filename: "<basename>", contentType: "image/png" })
@@ -258,7 +261,7 @@ upload  = mcp__linear__prepare_attachment_upload({ issueId: "<ticket uuid>", fil
 mcp__linear__create_attachment_from_upload({ issueId: "<ticket uuid>", assetUrl: upload.assetUrl, filename: "<basename>", title: "Repro screenshot" })
 ```
 
-Record each returned `attachment.url` into `evidence.screenshotAttachments[]`; Step 10 cites them in the Slack post. If a screenshot path is in `/var/folders/.../T/` or another temp location, copy it to `~/HeyBap Pipeline/artifacts/BAP-<n>/` first so the upload doesn't race with cleanup.
+Record each returned `attachment.url` into `evidence.screenshotAttachments[]` in Step 10; Step 11 cites them in the Slack post. If a screenshot path is in `/var/folders/.../T/` or another temp location, copy it to `~/HeyBap Pipeline/artifacts/<finding-slug>/` first so the upload does not race with cleanup.
 
 If `evidence.screenshots` is empty (purely backend bug, Step 2 was skipped, user pasted nothing), skip this substep. Do not invent screenshots.
 
@@ -270,7 +273,7 @@ Title rules:
 
 ## Step 7 — implement the fix on a branch (one iteration of the verify loop)
 
-Step 7 + Step 7.5 form a loop: implement alt #1 → push → verify in Chrome MCP → on FAIL roll forward to alt #2, re-implement on the SAME branch (new commit), re-push, re-verify. The loop exits when verification PASSES, or when `pickedAlternatives` is exhausted, or when iteration cap `config.local_dev.max_verify_iterations` (default 3) is reached. Only the terminal state triggers Step 8 (PR-open / update), Step 9 (Linear), and Step 10 (Slack).
+Step 7 + Step 7.5 form a loop: implement alt #1 → push → verify in Chrome MCP → on FAIL roll forward to alt #2, re-implement on the SAME branch (new commit), re-push, re-verify. The loop exits when verification PASSES, or when `pickedAlternatives` is exhausted, or when iteration cap `config.local_dev.max_verify_iterations` (default 3) is reached. Only the terminal state triggers Step 8 (PR-open / update), Step 9 (CI watch), Step 10 (Linear), and Step 11 (Slack).
 
 Iteration bookkeeping (record at the start of each attempt):
 
@@ -288,7 +291,7 @@ On the local clone — **iteration 1**:
 ```bash
 cd /tmp/bap-investigation   # or wherever the clone lives
 git checkout main && git pull
-git checkout -b fix/bap-<n>-<short-slug>     # or feat/bap-<n>-<short-slug> for features
+git checkout -b fix/<short-slug>     # or feat/<short-slug> for features
 ```
 
 On **iterations 2+**: stay on the same branch. Before implementing the new alternative, **revert the previous iteration's commit** so the working tree is clean for the new approach (otherwise iter 1's stale edits leak into iter 2's final state):
@@ -297,9 +300,9 @@ On **iterations 2+**: stay on the same branch. Before implementing the new alter
 git revert HEAD --no-edit       # "Revert iter N-1" appears as its own commit; clean history, no force-push
 ```
 
-The PR is opened only at terminal state (Step 8). Mid-loop, the branch lives on GitHub but no PR exists yet — Baptiste isn't pinged until the loop exits successfully. The Linear ticket records each attempt as a comment for the audit trail.
+The PR is opened only at terminal state (Step 8). Mid-loop, the branch lives on GitHub but no PR exists yet, no Linear ticket exists, and Baptiste is not pinged. Record each attempt in the local iteration log; Step 10 copies the final iteration summary into Linear only after CI is green.
 
-Slug rules: kebab-case, ≤4 words, derived from the bug noun (e.g. `chat-column-collapse`, `audio-attachment-size`, `coworker-postmessage-listener`). The `bap-<n>` prefix lets Linear's GitHub integration auto-attach the branch + PR.
+Slug rules: kebab-case, ≤4 words, derived from the bug noun (e.g. `chat-column-collapse`, `audio-attachment-size`, `coworker-postmessage-listener`). Do not include `bap-<n>` until the ticket exists.
 
 **Implement the alternative for THIS iteration** (`pickedAlternatives[iteration - 1]`), nothing more. Constraints:
 
@@ -318,10 +321,10 @@ Slug rules: kebab-case, ≤4 words, derived from the bug noun (e.g. `chat-column
 
 Observe a green pass before staging. If a test breaks unexpectedly, do not edit the test to make it pass; treat the breakage as new evidence that the current iteration's alternative is wrong — the verify loop in Step 7.5 will pick the NEXT alternative. If the local run is red, fix the cause; do not push and rely on CI to catch it.
 
-Commit with a Bap-style message that references the ticket. On iterations 2+, the message is prefixed with `(iter N)` so the PR log shows the loop:
+Commit with a Bap-style message. On iterations 2+, the message is prefixed with `(iter N)` so the PR log shows the loop:
 
 ```
-<Area>: <verb> <object> (BAP-<n>)
+<Area>: <verb> <object>
 
 <one paragraph: what changed and why, with file:line refs>
 ```
@@ -353,7 +356,7 @@ git -C "$MAIN" switch "$BRANCH"
 sleep <config.local_dev.hmr_wait_seconds>   # let Next.js HMR recompile
 ```
 
-If any of the swap commands fail (uncommitted merge, locked index, branch not yet pushed), set `verifyResult = { passed: false, skipped: true, reason: "branch-swap-failed: <error>" }` and jump to subsection D (restore). Step 10 will use the SKIPPED template.
+If any of the swap commands fail (uncommitted merge, locked index, branch not yet pushed), set `verifyResult = { passed: false, skipped: true, reason: "branch-swap-failed: <error>" }` and jump to subsection D (restore). Step 11 will use the SKIPPED template after CI is green.
 
 ### B. Reproduce the same path and assert the symptom is gone
 
@@ -408,15 +411,15 @@ iter = current iteration number (1-indexed)
 maxIter = min(config.local_dev.max_verify_iterations, len(pickedAlternatives))
 
 if verifyResult.passed === true:
-  exit loop → continue to Step 8 (open or update PR) → Step 9 PASS path → Step 10 PASS template
+  exit loop → continue to Step 8 (open or update PR) → Step 9 watch CI → Step 10 Linear → Step 11 Slack PASS template
 
 elif verifyResult.skipped === true:
-  exit loop → continue to Step 8 → Step 9 PASS path → Step 10 SKIPPED template
+  exit loop → continue to Step 8 → Step 9 watch CI → Step 10 Linear → Step 11 Slack SKIPPED template
   (skipped means "couldn't verify", not "fix is wrong" — we still hand off to Baptiste with the explicit caveat)
 
 elif verifyResult.passed === false:
   # roll back this iteration's commit only if it broke local tests; otherwise keep it for the iteration log
-  add to ticket comment: "Iteration ${iter}: tried ${pickedAlternatives[iter-1].label}, verify KO. ${verifyResult.observed}"
+  add to the local iteration log: "Iteration ${iter}: tried ${pickedAlternatives[iter-1].label}, verify KO. ${verifyResult.observed}"
 
   if iter < maxIter:
     # try the next alternative
@@ -426,18 +429,18 @@ elif verifyResult.passed === false:
   elif iter === maxIter AND a NEW finding emerged during the loop suggesting the bug is COMPLEX-SCOPED:
     # escalate gracefully — the bug isn't really SIMPLE
     invoke bap-feature-brainstorm with the augmented context (original + iteration log)
-    close the SIMPLE ticket as "re-classified" + link the new brainstorm ticket
+    create no SIMPLE ticket; invoke bap-feature-brainstorm with the augmented context
     exit (no PR PASS / no Slack post here — the brainstorm skill posts its own)
 
   else:
     # exhausted alternatives, no escalation candidate — terminal FAILED
-    exit loop → continue to Step 8 (ensure PR is in draft state via gh pr ready --undo if needed) → Step 9 FAILED path → Step 10 FAILED template
+    exit loop → continue to Step 8 (ensure PR is in draft state via gh pr ready --undo if needed) → Step 9 watch CI if a PR was opened → Step 10 Linear fail path only if a durable audit ticket is still useful → Step 11 FAILED template
 ```
 
 Concretely:
 
 - **Same branch through all iterations.** Each iteration adds one new commit prefixed `(iter N)`; never `git reset --hard` or force-push. The PR's commit log IS the iteration audit trail.
-- **Terminal state only.** The PR / Linear / Slack are only updated at loop exit (PASS, SKIPPED, escalated, or exhausted FAILED). Mid-loop, the only side-effect is the Linear ticket comment recording each attempt.
+- **Terminal state only.** The PR is opened at loop exit. Linear and Slack are only updated after Step 9 reports green CI. Mid-loop, record attempts locally.
 - **Iteration cap is min(`config.local_dev.max_verify_iterations`, `len(pickedAlternatives)`)**. If only 1 alternative is genuinely defensible (Step 4 said so), the loop has 1 attempt and exits to FAILED if it doesn't verify. If 3 alternatives exist, up to 3 attempts.
 - **Escalation trigger.** During iteration, if the failure observation reveals that the bug requires a structural change (new abstraction, schema migration, cross-cutting refactor) that Step 4's alternatives did not predict, ESCALATE rather than continue thrashing. The escape valve invokes `bap-feature-brainstorm` with the new evidence; the original SIMPLE ticket is closed with a link to the brainstorm. Lubin re-runs `/phase-2` later if the team picks an option.
 
@@ -456,29 +459,30 @@ Run subsection D inside a trap / finally so a thrown error in B does not leave t
 
 - **Playwright fallback** (autonomous loop, no Chrome MCP). Same swap + sleep + assertion logic, but the navigation + screenshot + console/network capture happens through the Playwright snippet from Step 2 (different output path). The headless context loses the operator's signed-in session, so use `storage-state.json`.
 - **Backend-only fix** (no UI surface). Skip subsections A-D. Verify via `curl` against an API endpoint or via `mcp__bap-local__chat_run` / `coworker_run`, asserting on the response shape. Record `verifyResult.assertion` in plain English just the same.
-- **Localhost down** OR **Chrome MCP disconnected** AND **Playwright fixture broken**. Set `verifyResult = { passed: false, skipped: true, reason: "..." }` and continue. Step 10 will use the SKIPPED template, explicitly flagging that nothing was verified — Baptiste then re-runs locally before merging.
+- **Localhost down** OR **Chrome MCP disconnected** AND **Playwright fixture broken**. Set `verifyResult = { passed: false, skipped: true, reason: "..." }` and continue. Step 11 will use the SKIPPED template after CI is green, explicitly flagging that nothing was verified — Baptiste then re-runs locally before merging.
 
 ## Step 8 — open the PR (terminal step of the verify loop)
 
 Only runs after the verify loop in Step 7.5 has exited (PASS, SKIPPED, or exhausted FAILED). Mid-loop the branch is pushed but no PR exists yet.
 
-The PR body carries **all the deep-research artefacts**: cause racine, alternatives **tried during the loop**, callers, tests, régression. The Linear ticket stays short (Step 6 is a status card); the PR is where Baptiste reviews the code and the context together.
+The PR body carries **all the deep-research artefacts**: cause racine, alternatives **tried during the loop**, callers, tests, régression. The Linear ticket will stay short once created after CI; the PR is where Baptiste reviews the code and the context together.
 
 PR state on open:
 
-- **PASS** terminal → open as **ready** (default `gh pr create`). Slack will post "Fixed, to review" in Step 10.
-- **SKIPPED** terminal (couldn't verify) → open as **ready** with an explicit "Verified : skipped" callout in the PR body. Baptiste re-runs locally before merging.
-- **FAILED** terminal (exhausted alternatives, none verified) → open as **draft** (`gh pr create --draft`). Slack will post "Vérif KO, à reprendre" pinging Lubin in Step 10. Baptiste does not get pinged on a broken PR.
+- **PASS** terminal → open as **ready** (default `gh pr create`). Step 9 must pass before Linear or Slack.
+- **SKIPPED** terminal (couldn't verify) → open as **ready** with an explicit "Verified : skipped" callout in the PR body. Step 9 must pass before Linear or Slack.
+- **FAILED** terminal (exhausted alternatives, none verified) → open as **draft** (`gh pr create --draft`). Do not ping Baptiste on a broken PR.
 
 When the FINDING_CONTEXT / iteration log gets large, write it to the PR body's "Iterations" section (one bullet per attempt: alt label, commit SHA, verifyResult.observed).
 
 ```bash
 git push -u origin <branch>
 gh pr create \
-  --title "BAP-<n> <Area>: <verb> <object>" \
+  --title "<Area>: <verb> <object>" \
   --base main \
   --body "$(cat <<'EOF'
-Closes BAP-<n>
+## Finding context
+Linear ticket pending until CI is green.
 
 ## Symptôme
 <une ligne en langue produit, ce que voit l'utilisateur>
@@ -495,19 +499,44 @@ EOF
 For features whose implementation is over ~50 lines, add `--draft`. For bugs and small features, non-draft.
 
 PR title rules:
-- Must start with `BAP-<n>` so Linear auto-attaches.
-- Then the standard `<Area>: <verb> <object>` from recent merged PRs.
+- Before CI, use the standard `<Area>: <verb> <object>` from recent merged PRs.
+- After Step 10 creates the Linear ticket, update the title to start with `BAP-<n>` so Linear and GitHub search connect cleanly.
 - Under 70 chars total (so the area + verb + object stays concise).
 - No em-dashes anywhere.
 
-Capture the PR URL returned by `gh pr create`. You will need it for Step 9.
+Capture the PR URL returned by `gh pr create`. You will need it for Step 9 and Step 10.
 
-## Step 9 — update the Linear ticket: status + assignee + attach PR
+## Step 9 — watch CI, fix red until green
 
-**Conditional on `verifyResult` from Step 7.5.**
+Required for every PR opened by this skill. The skill owns the green-up; never leave a red PR open for Baptiste to deal with, and never create the Linear ticket or Slack notification while CI is red or pending.
+
+1. **Watch CI.** After the push, poll `gh pr checks <num>` until every check completes. The Bap CI runs oxlint, typecheck (`tsgo`), Fallow audit (CRAP / dead-code / dupes), gitleaks, react-doctor, and `bun run test:ci` (vitest unit + integration).
+
+2. **If any check is red: fix it, do not abandon.** Read the failure log with `gh run view <id> --log-failed`, identify the root cause, fix in code on the SAME branch (do not close + reopen), commit, push, and watch again. Loop until green. Common gates:
+   - Fallow CRAP score at or above threshold → extract a small helper to drop the function's cyclomatic.
+   - oxlint `curly` → braces around `if` bodies.
+   - typecheck error → match the existing signature.
+   - vitest failure → re-read Step 4, the fix is probably wrong.
+   Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate.
+
+3. **When CI is green, continue to Step 10.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow.
+
+4. **If CI cannot be made green, stop before Step 10.** Leave the PR draft if appropriate, report the blocker to the operator, and create no Linear ticket and no Slack handoff.
+
+## Step 10 — create/update the Linear ticket after green CI
+
+**This step must run only after Step 9 reports green CI.**
 
 - If `verifyResult.passed === true` OR `verifyResult.skipped === true`: transition to `In Review` and reassign to Baptiste (the PR is ready for him to look at).
 - If `verifyResult.passed === false && verifyResult.skipped === false` (verification ran and failed): keep status `In Progress`, keep assignee Lubin, add a comment with the observed failure. **Do not reassign to Baptiste on a broken fix.** Lubin will re-investigate; the autonomous loop can retry on the next tick.
+
+First create the ticket from the deferred Step 6 payload, then capture `BAP-<n>` and the ticket URL. Immediately update the PR title/body so the real ticket identifier is visible:
+
+```bash
+gh pr edit <num> \
+  --title "BAP-<n> <Area>: <verb> <object>" \
+  --body-file <updated-body-containing-ticket-and-finding-context.md>
+```
 
 Pass case (verified OR skipped):
 
@@ -536,11 +565,11 @@ mcp__linear__save_comment({
 })
 ```
 
-Linear's GitHub integration usually attaches the PR automatically once the branch lands (because the branch name contains `bap-<n>`). The explicit `links` attachment is a belt-and-braces fallback if the integration is delayed.
+Linear's GitHub integration may attach the PR automatically after Step 10 edits the PR title/body to include `BAP-<n>`. The explicit `links` attachment is a belt-and-braces fallback if the integration is delayed.
 
 `bap-post-deploy-verify` later transitions the ticket from `In Review` to `Live` once Baptiste's merge + the prod deploy are confirmed by the verifier. Assignee can stay Baptiste at that point (he is the historical owner of the merged change).
 
-`links` is append-only, so re-running this step in a retry is safe.
+`links` is append-only, so re-running this step in a retry is safe. Re-running must not create a duplicate ticket; search for the PR URL or finding hash first if Step 10 is retried after a partial failure.
 
 **Attach the AFTER screenshot** captured in Step 7.5 (UI changes only). Same flow as Step 6's BEFORE attachment:
 
@@ -550,13 +579,13 @@ upload  = mcp__linear__prepare_attachment_upload({ issue: "BAP-<n>", filename: "
 mcp__linear__create_attachment_from_upload({ issue: "BAP-<n>", assetUrl: upload.assetUrl, title: "After fix" })
 ```
 
-Record the returned `attachment.url` as the AFTER entry in `evidence.screenshotAttachments[]`. Step 10 cites it in the Slack post.
+Record the returned `attachment.url` as the AFTER entry in `evidence.screenshotAttachments[]`. Step 11 cites it in the Slack post.
 
-## Step 10 — Slack `#pr-lubin` notification (problem + fix + ping Baptiste for review)
+## Step 11 — Slack `#pr-lubin` notification after green CI
 
-**This step is MANDATORY**. Without the Slack post, Baptiste doesn't learn the PR exists and the contract is not fulfilled. The skill is NOT done at "PR opened + Linear updated" — it is done at "Slack #pr-lubin post permalink captured".
+**This step must run only after Step 9 reports green CI and Step 10 has created/updated Linear.** Without the Slack post, Baptiste does not learn the PR exists and the contract is not fulfilled. The skill is NOT done at "PR opened + CI green + Linear updated" — it is done at "Slack #pr-lubin post permalink captured".
 
-Required for every shipped PR. The team relies on this message — not on Linear's auto-broadcast — to know what is ready for review. Skip it and Baptiste does not learn the PR exists until he opens Linear on his own.
+Required for every shipped PR. The team relies on this message — not on Linear's auto-broadcast — to know what is ready for review. Skip it and Baptiste does not learn the PR exists until he opens Linear on his own. Never send it while CI is pending or red.
 
 Resolve identifiers:
 
@@ -649,22 +678,7 @@ Constraints:
 - The `Screenshots:` line is **mandatory whenever `evidence.screenshotAttachments` has at least a BEFORE entry** (PASS and FAILED variants always have BEFORE + AFTER; SKIPPED has only BEFORE if Step 2 ran). Cite the Linear asset URLs (Slack auto-unfurls them inline). Omit only for purely backend fixes where Step 2 was skipped.
 - The Slack channel id `C0BCH5L6PQS` (`#pr-lubin`) and the reviewer user id `U0A87JNV8QP` (Baptiste) are pinned in config. Resolve via `slack_search_channels` / `slack_search_users` only if the config placeholder is unchanged; otherwise use the configured ids directly.
 
-## Step 11 — watch CI, fix red until green
-
-Required for every PR opened by this skill. The skill owns the green-up; never leave a red PR open for Baptiste to deal with.
-
-1. **Watch CI.** After the push, poll `gh pr checks <num>` until every check completes. The Bap CI runs oxlint, typecheck (`tsgo`), Fallow audit (CRAP / dead-code / dupes), gitleaks, react-doctor, and `bun run test:ci` (vitest unit + integration).
-
-2. **If any check is red: fix it, do not abandon.** Read the failure log with `gh run view <id> --log-failed`, identify the root cause, fix in code on the SAME branch (do not close + reopen), commit, push, and watch again. Loop until green. Common gates:
-   - Fallow CRAP score at or above threshold → extract a small helper to drop the function's cyclomatic.
-   - oxlint `curly` → braces around `if` bodies.
-   - typecheck error → match the existing signature.
-   - vitest failure → re-read Step 4, the fix is probably wrong.
-   Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate.
-
-3. **When CI is green, stop here.** The operator (Lubin) no longer has merge rights on `the-agentic-company/bap`; **only Baptiste merges**. The skill's contract ends at "PR opened, CI green, Slack #pr-lubin pinged Baptiste at Step 10." Do NOT call `gh pr merge`. Do NOT trigger any deploy workflow. The Slack post from Step 10 is the handoff; Baptiste reviews + squash-merges from GitHub when he is ready.
-
-4. **Post-merge cleanup is owned by `bap-post-deploy-verify`**, not by this skill. Once Baptiste merges and the staging / prod deploy lands, the verifier reads the FINDING_CONTEXT off the Linear ticket and confirms the fix in prod. This skill exits at "CI green."
+Post-merge cleanup is owned by `bap-post-deploy-verify`, not by this skill. Once Baptiste merges and the staging / prod deploy lands, the verifier reads the FINDING_CONTEXT off the Linear ticket and confirms the fix in prod. This skill exits at "CI green + Linear ticket created + Slack handoff posted."
 
 ## Step 12 — return to the user
 
@@ -672,9 +686,9 @@ Output exactly three blocks, no commentary, no headers:
 
 1. The Linear ticket: `BAP-<n>  <ticket URL>`.
 2. The PR URL.
-3. The Slack permalink from Step 10, **or** `SLACK POST FAILED: <error>` if Step 10's retry also failed. Never silently omit this block.
+3. The Slack permalink from Step 11, **or** `SLACK POST FAILED: <error>` if Step 11's retry also failed. Never silently omit this block.
 
-Screenshots are already attached to the Linear ticket and referenced in the Slack post (Step 6 + Step 10) — no manual upload to mention to the user.
+Screenshots are already attached to the Linear ticket and referenced in the Slack post (Step 10 + Step 11) — no manual upload to mention to the user.
 
 If `slackPostFailed: true`, the operator must repost manually before the PR can be considered handed off. The skill flags this loudly rather than pretending the run succeeded.
 
@@ -694,16 +708,16 @@ Use as sanity checks if the current bug sounds similar:
 - Do not assume Vercel / S3 / specific vendors unless the repo already uses them.
 - Do not claim something is broken without a `file:line` proof.
 - Do not use em-dashes anywhere (commit message, PR title, PR body, Linear ticket).
-- Do not skip Step 10's Slack `#pr-lubin` notification. The team relies on the explicit problem + fix summary and the Baptiste ping to know what is ready for review; Linear's auto-broadcast alone is not enough.
+- Do not skip Step 11's Slack `#pr-lubin` notification after green CI. The team relies on the explicit problem + fix summary and the Baptiste ping to know what is ready for review; Linear's auto-broadcast alone is not enough.
 - Do not drop the `<@reviewer-id>` ping from the Slack message. Without it, the post is silent and the review never starts.
-- Do not leave screenshots as local paths in the ticket description when `evidence.screenshots` is non-empty. The Step 6 attachment substep must run and the Slack post (Step 10) must cite the resulting URLs. Telling the user to upload manually defeats the automation.
-- Do not open the PR before the Linear ticket. The ticket identifier needs to be in the branch + title.
+- Do not leave screenshots as local paths in the ticket description when `evidence.screenshots` is non-empty. The Step 10 attachment substep must run and the Slack post (Step 11) must cite the resulting URLs. Telling the user to upload manually defeats the automation.
+- Do not create the Linear ticket before CI is green. The PR opens first, CI gates the external notifications, and Step 10 then updates the PR with the real ticket identifier.
 - Do not skip the FINDING_CONTEXT JSON block. The post-deploy verifier depends on it to close the loop.
 - Do not skip Step 3's parallel-subagent fan-out, even on "obvious" bugs. The cost of one wasted research pass is 30 seconds; the cost of one wrong fix shipped is hours of regression. The 5 angles are mandatory.
 - Do not pick the first plausible fix in Step 4. Enumerate 2 to 3 alternatives grounded in Step 3 and pick on the rubric (reuse > extend > additive > smallest surface). The "Alternatives considérées" section must be real, not retrofitted.
 - Do not introduce a new abstraction, hook, service, or file when Step 3 angle 1 returned an adjacent implementation. Reuse the adjacency or explain why it does not fit.
 - Do not edit a test to make it pass after the fix. A test break is evidence the fix is wrong; return to Step 4 and pick a different alternative.
-- Do not call `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The contract stops at "CI green + Slack #pr-lubin pinged Baptiste."
+- Do not call `gh pr merge` from this skill. Lubin no longer has merge rights on `the-agentic-company/bap`; Baptiste is the only person who merges. The contract stops at "CI green + Linear ticket created + Slack #pr-lubin pinged Baptiste."
 - Do not trigger any deploy workflow (`release-main.yml`, `prod-release.yml`) from this skill. Deploys are owned by Baptiste post-merge.
 - Do not post the PASS template (`Fixed, to review`) when `verifyResult.passed === false`. The fix did not fix; the post must be the FAILED template pinging Lubin instead. Lying to Baptiste burns his trust in this pipeline within one occurrence.
 - Do not skip Step 7.5's Chrome MCP verification when `localhost:3000` is reachable and the bug has a UI surface. Falling back to "screenshot only, no assertion" defeats the point — the symptom must be reproduced post-fix and observed gone before any `Fixed` claim.
