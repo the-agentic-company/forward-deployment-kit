@@ -35,7 +35,7 @@ Parse these from the request:
 ## Codex downstream action
 
 - `needs-clarification`: ask the user one concise question and stop before any ticket, artifact, or implementation work.
-- `simple`: implement the fix in the appropriate repo when feasible, verify it, open the PR, then stay in the loop until GitHub CI is fully green and Greptile reaches a `5/5` confidence score. If either gate fails, iterate on the same branch and re-check both gates. Only once CI is green and Greptile is `5/5` should the workflow send the Slack handoff and post a GitHub PR comment pinging `@baptistecolle`. Screenshots are evidence only: never commit them or attach them as PR files/comments; they belong only in the PR description.
+- `simple`: implement the fix in the appropriate repo when feasible, verify it, open the PR, then stay in the loop until GitHub CI is fully green and Greptile reaches a `5/5` confidence score. After every new push to the PR branch, post a PR comment containing exactly `@greptileai` to trigger a fresh Greptile scoring pass for the latest head SHA. If either gate fails, iterate on the same branch and re-check both gates. Only once CI is green and Greptile is `5/5` should the workflow send the Slack handoff and post a GitHub PR comment pinging `@baptistecolle`. Screenshots are evidence only: never commit them or attach them as PR files/comments; they belong only in the PR description.
 - `complex-scoped`: prepare the brainstorm artifact the team needs, using the FDK brainstorm format as the reference.
 - `complex-fuzzy`: prepare the direction-shaping artifact the team needs, using the FDK shaping format as the reference.
 

@@ -484,9 +484,15 @@ Required for every shipped PR. The team relies on the post-gate handoff, not on 
    - vitest failure → re-read Step 4, the fix is probably wrong.
    Never bypass with `--admin`, `--no-verify`, or by commenting-out the gate.
 
-3. **Wait for Greptile on the latest head SHA.** Once CI is green, poll the PR review surface until Greptile has posted its notes for the current head commit. Do not send Slack and do not ping Baptiste before Greptile has responded to the latest revision.
+3. **Trigger Greptile on every new push, then wait for the latest head SHA.** After every new push to the PR branch, immediately post a PR comment containing exactly `@greptileai` so Greptile reruns on the latest head commit:
 
-4. **Greptile is a hard gate at `5/5`.** If Greptile's confidence score is below `5/5`, address the notes on the SAME branch, push again, and restart Step 10 from CI. Do not hand off a PR with Greptile at `4/5` or below, even if CI is green.
+```bash
+gh pr comment "$PR_NUMBER" --body "@greptileai"
+```
+
+Once the trigger comment is posted, poll the PR review surface until Greptile has posted its notes for the current head commit. Do not send Slack and do not ping Baptiste before Greptile has responded to the latest revision.
+
+4. **Greptile is a hard gate at `5/5`.** If Greptile's confidence score is below `5/5`, address the notes on the SAME branch, push again, post a fresh `@greptileai` comment, and restart Step 10 from CI. Do not hand off a PR with Greptile at `4/5` or below, even if CI is green.
 
 5. **Exit Step 10 only when both gates pass.** The terminal success state is: GitHub CI fully green and Greptile confidence `5/5` on the latest head SHA. Only then continue to Step 11.
 
@@ -596,6 +602,7 @@ Constraints:
 - Do not include screenshots in the Slack body. Keep screenshots only in the PR description.
 - The Slack channel id `C0BCH5L6PQS` (`#pr-lubin`) and the reviewer user id `U0A87JNV8QP` (Baptiste) are pinned in config. Resolve via `slack_search_channels` / `slack_search_users` only if the config placeholder is unchanged; otherwise use the configured ids directly.
 - The GitHub comment must only be posted after Step 10 succeeds. Do not ping `@baptistecolle` before CI is green and Greptile is `5/5`.
+- After each new push to the branch, post a separate PR comment containing exactly `@greptileai` before waiting for Greptile's refreshed score. Do not assume Greptile rescans automatically.
 
 ## Step 12 — return to the user
 
@@ -637,6 +644,7 @@ Use as sanity checks if the current bug sounds similar:
 - Do not trigger any deploy workflow (`release-main.yml`, `prod-release.yml`) from this skill. Deploys are owned by Baptiste post-merge.
 - Do not ping `@baptistecolle` in a GitHub PR comment before GitHub CI is green and Greptile is `5/5` on the latest head SHA.
 - Do not treat Greptile `4/5` as good enough. The gate is explicitly `5/5`; if it is lower, iterate again on the same branch.
+- Do not forget the `@greptileai` comment after a new push. Without it, you may be reading a stale Greptile score from the previous head SHA.
 - Do not post the PASS template (`Fixed, to review`) when `verifyResult.passed === false`. The fix did not fix; the post must be the FAILED template pinging Lubin instead. Lying to Baptiste burns his trust in this pipeline within one occurrence.
 - Do not skip Step 7.5's Chrome MCP verification when `localhost:3000` is reachable and the bug has a UI surface. Falling back to "screenshot only, no assertion" defeats the point — the symptom must be reproduced post-fix and observed gone before any `Fixed` claim.
 - Do not leave the operator's main checkout on the fix branch after Step 7.5. Step 7.5 subsection D restores the previous branch and pops the stash; this MUST run even on a thrown error (use a trap / finally).
