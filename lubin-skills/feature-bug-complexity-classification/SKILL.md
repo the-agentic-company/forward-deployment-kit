@@ -9,8 +9,11 @@ description: |
   COMPLEX-SCOPED, or COMPLEX-FUZZY. Dispatches to one of three leaf skills:
   `bap-bug-report` (SIMPLE: implements the quick fix on a branch in
   `the-agentic-company/bap`, opens a PR, waits for GitHub CI to be green,
-  then creates a Linear ticket at status `In Review` linked to the PR and
-  posts the Slack review handoff); `bap-feature-brainstorm`
+  then waits for Greptile to reach a `5/5` confidence score, iterates on
+  the same branch until both gates pass, and only then posts the Slack
+  review handoff plus a GitHub PR comment pinging `@baptistecolle`.
+  Screenshots are never committed or attached to the PR as files; they live
+  only in the PR description); `bap-feature-brainstorm`
   (COMPLEX-SCOPED: investigates, frames the finding as problem + 3 options
   + decision question, creates a Linear ticket at status `Triage` with
   label `Need More Shaping`, assignee Baptiste); or `bap-direction-shaping`
@@ -34,7 +37,7 @@ clarification gate. The router classifies, decides where the finding lands, and
 invokes the right downstream skill autonomously unless the finding needs one
 operator answer before safe classification.
 
-Ticketed findings become Linear tickets in the `Bap` team at the point defined by their downstream skill. SIMPLE findings are ticketed only after their PR has green CI; COMPLEX-SCOPED findings are ticketed immediately as shaping work; COMPLEX-FUZZY findings start in Slack without a Linear ticket. The router never posts to Slack itself.
+Ticketed findings become Linear tickets in the `Bap` team at the point defined by their downstream skill. SIMPLE findings do not create a Linear ticket; they end with a PR that must have green CI plus Greptile `5/5` before the Slack handoff and GitHub ping. COMPLEX-SCOPED findings are ticketed immediately as shaping work; COMPLEX-FUZZY findings start in Slack without a Linear ticket. The router never posts to Slack itself.
 
 No finding bypasses this router. No finding is silently logged in a TODO comment or in the orchestrator's final report only.
 
@@ -174,7 +177,7 @@ After classification, three destinations:
 
 | classification | downstream skill | output |
 |----------------|------------------|--------|
-| SIMPLE (bug or feature) | `bap-bug-report` | Branch + quick fix implemented + PR opened on `the-agentic-company/bap` + GitHub CI watched until green + only then Linear ticket created in team `Bap` at status `In Review`, labels `Bug` or `Feature` + `Dogfooding`, assignee **Baptiste**, PR URL attached, and Slack `#pr-lubin` handoff posted. If CI is red or pending, no Linear ticket and no Slack handoff are created. Features whose fix exceeds ~50 lines land as draft PRs with a TODO checklist in the PR body and still must pass CI before any ticket or Slack post. |
+| SIMPLE (bug or feature) | `bap-bug-report` | Branch + quick fix implemented + PR opened on `the-agentic-company/bap` + GitHub CI watched until green + Greptile watched until it reaches `5/5` confidence. If either gate fails, the skill iterates on the same branch and re-runs both gates. Only when both gates pass does it post the Slack `#pr-lubin` handoff and add a GitHub PR comment pinging `@baptistecolle`. No Linear ticket is created for SIMPLE findings. Screenshots never go in the diff or PR files; they are referenced only in the PR description. Features whose fix exceeds ~50 lines land as draft PRs with a TODO checklist in the PR body and still must clear both gates before any Slack handoff or GitHub ping. |
 | COMPLEX-SCOPED (surface known, design call required) | `bap-feature-brainstorm` | Investigation + problem statement + 3 defensible options + decision question, posted as a Linear ticket in team `Bap` at status `Triage`, labels `Need More Shaping` + (`Bug` or `Feature`) + `Dogfooding`, assignee **Baptiste** (CTO drives the design choice). For capability-gap findings, the brainstorm skill's own Step 3b quantifies impact (Grain corpus scan + past builds scan + use cases unlocked + verdict) so the ticket carries an Impact section. **Terminal here**: no PR is opened, no tests, no code, no `bap-post-deploy-verify`. The dispatch ends at the Linear ticket. Implementation comes later, via a follow-up SIMPLE ticket that re-enters the gate once the team has picked an option (the brainstorm ticket is transitioned to `In Progress` and the new SIMPLE ticket links back via `relatedTo`). |
 | COMPLEX-FUZZY (direction unclear, no obvious surface, big changes) | `bap-direction-shaping` | Structured problem statement (problem + why fuzzy + possible surfaces + open questions + origin) posted in Slack `#feature-brainstorming` via the Slack MCP. **NO Linear ticket created** at this stage. If the team converges on a direction, the finding gets re-filed via the gate with the new context and lands as SIMPLE or COMPLEX-SCOPED on the next pass. |
 
@@ -215,7 +218,7 @@ The router returns a structured result to the calling skill:
 ```
 
 - `prUrl` is set only when downstream is `bap-bug-report` and the PR was opened.
-- `linearTicketIdentifier` / `linearTicketUrl` are set for `bap-bug-report` (SIMPLE) only after its PR has green CI, and for `bap-feature-brainstorm` (COMPLEX-SCOPED) when the brainstorm ticket is created. They are **absent** for `bap-direction-shaping` (COMPLEX-FUZZY) since no Linear ticket is created at that stage, and absent for SIMPLE if CI did not pass.
+- `linearTicketIdentifier` / `linearTicketUrl` are set only for `bap-feature-brainstorm` (COMPLEX-SCOPED) when the brainstorm ticket is created. They are **absent** for `bap-bug-report` (SIMPLE), which ends with the PR + Slack + GitHub comment handoff, and absent for `bap-direction-shaping` (COMPLEX-FUZZY) since no Linear ticket is created at that stage.
 - `slackThreadUrl` is set only for `bap-direction-shaping` (COMPLEX-FUZZY).
 - `clarificationQuestion` and `likelySimplePath` are set only for `needs-clarification`; no downstream skill, ticket, Slack post, or PR is created in that verdict.
 - `fuzzyReasons` is populated only when complexity is `complex-fuzzy`; empty otherwise.
@@ -347,6 +350,6 @@ If `team_id` is missing or set to the placeholder, the router refuses to dispatc
 - [bap-coworker-test-loop](../bap-coworker-test-loop/SKILL.md): the most prolific source of findings (every diagnose step is a potential finding).
 - [transcript-to-bap-coworker](../transcript-to-bap-coworker/SKILL.md): the orchestrator that aggregates findings into the final report.
 - [bap-direction-shaping](../bap-direction-shaping/SKILL.md): dispatched for COMPLEX-FUZZY findings. Posts a structured problem statement in Slack `#feature-brainstorming` for team discussion. No Linear ticket created at that stage.
-- `bap-bug-report`: dispatched for SIMPLE findings (bug or small feature). Opens the PR, waits for green CI, then creates the Linear ticket at status `In Review` and posts the Slack handoff. Lives in `lubin-skills/bap-bug-report/`.
+- `bap-bug-report`: dispatched for SIMPLE findings (bug or small feature). Opens the PR, waits for green CI, waits for Greptile `5/5`, iterates until both pass, then posts the Slack handoff and a GitHub PR comment pinging `@baptistecolle`. Lives in `lubin-skills/bap-bug-report/`.
 - `bap-feature-brainstorm`: dispatched for COMPLEX-SCOPED findings (feature or structural bug with a known surface). Creates the Linear ticket at status `Triage` with label `Need More Shaping`, assignee Baptiste. Lives in `~/.claude/skills/bap-feature-brainstorm/`.
 - `bap-post-deploy-verify`: transitions the Linear ticket to `Live` after a verified post-deploy run, or opens a new Linear ticket labeled `Regression` (linked via `relatedTo`) if the finding came back. Only runs against tickets from `bap-bug-report` / `bap-feature-brainstorm`; FUZZY findings never reach it (no ticket exists).
