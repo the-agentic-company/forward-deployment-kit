@@ -637,40 +637,19 @@ matches **both** `foo/` and `foo-2/`, and `head -1` picks the *old* `foo/` (lexi
 - There is **no `skill_delete` / `skill_update` MCP tool** — stale copies can only be toggled off in the UI (HeyBap → Skills). Treat de-duping skills as a HUMAN STOP, like rule #20.
 - Best: get the slug right on the first `skill_add` and avoid re-adds; iterate the bundled script via the pinned path instead of re-uploading under a colliding name.
 
-## 28. Broad research coworkers need an execution budget, not just an end condition
+## 28. Email outputs must be sent, not just drafted
 
-HeyBap coworkers are bad crawlers when the prompt asks for exhaustive coverage before the final answer. A common failure pattern: "for every commune / account / source, visit official pages, open several PDFs, then search the open web, then send the email." The prompt has a stop rule after the email, but nothing bounds the work *before* the email. The run keeps browsing, opening documents, or retrying ambiguous pages until it hits `runtime_stopped_making_progress`, a client timeout, or a partial final answer.
+When a coworker's job ends with an email, say it explicitly in the prompt: the final deliverable is **sending the email through the available Gmail / Outlook / email tool**, not merely writing a summary in chat or drafting the body.
 
-Treat any coworker as **broad research** when it combines 3+ of these signals:
-
-- A list of many entities to cover (communes, clients, websites, SKUs, competitors).
-- Per-entity obligations ("verify at least one source per commune", "open 3 PDFs per index", "search several angles").
-- Two-layer discovery (official sources first, then press / open web / blogs).
-- Browser navigation or PDF reading as the main work.
-- A final external action (email / Slack / Notion) that only happens after the full sweep.
-
-Do not ship that as an unbounded prompt. Before `coworker_create`, choose one of two patterns:
-
-**A. Shard + aggregate (preferred for production watch).** Split the work into bounded shard coworkers (by geography, source family, or account segment), then have a small aggregator coworker merge their structured findings and send the final email. Each shard owns a small, testable unit and can fail without losing the whole watch.
-
-**B. Single coworker with hard budgets.** If it must be one coworker, write the budget into the prompt with concrete ceilings:
+Use hard wording:
 
 ```text
-Execution budget for this run:
-- max 8 entities checked
-- max 2 official sources per entity
-- max 2 PDFs opened per source index
-- max 12 open-web searches total
-- max 35 browser/PDF tool calls total
-- when the budget is reached, stop research, send the email with:
-  (1) confirmed findings, (2) signals to verify, (3) sources not checked because budget was reached
+Après avoir préparé la synthèse, tu dois envoyer l'email final à <recipient>.
+Ne t'arrête pas après avoir rédigé ou affiché la synthèse en chat.
+Le run est réussi uniquement si l'outil d'envoi d'email confirme l'envoi.
 ```
 
-The final action is not optional: **budget reached is a completion condition**, not a reason to keep digging. The coworker must send the best available report, explicitly list coverage gaps, and stop.
-
-For scheduled watches, add a cursor instead of re-crawling everything: keep `lastSeen` ids / URLs / dates in a small state file, Sheet, Notion table, or MCP-backed store. The run checks new or changed items since the cursor, updates the cursor after the email, and never treats "search the whole internet again" as the default path.
-
-When the client truly needs exhaustive legal or regulatory coverage, build a deterministic crawler / MCP for the source layer and let the coworker summarize the crawler's structured output. The LLM should decide relevance and write the email; it should not be the thing trying to exhaustively paginate town-hall websites for an hour.
+Without that instruction, HeyBap coworkers often produce a good summary, treat it as the answer, and forget the actual send step.
 
 ## Build / debug workflow
 
@@ -700,7 +679,7 @@ When the client truly needs exhaustive legal or regulatory coverage, build a det
 - Retrying a `coworker_create` that returned "Internal server error" without checking `coworker_list` first — rule #25. The errored call often persisted the coworker anyway; retrying breeds silent duplicates that steal runs and send you debugging the wrong one. Reconcile via the list, keep one, `setStatus: off` the rest (no MCP delete; hard-delete is UI-only).
 - A panel button that greys then does nothing in chat — rule #26. Correct envelope + `type="button"` is not enough: the activation gate rejects (`no_user_activation`) if `activeElement` isn't the iframe or engagement isn't armed. Post before disabling, and render the `…-result` ack so the reason is visible instead of silent.
 - Re-running `skill_add` to "update" a skill — rule #27. It forks `foo-2`; all enabled skills land in the sandbox, and a `grep foo | head -1` discovery then runs the stale `foo/`. Pin discovery to the exact slug (`-path '*foo-2*'`) and toggle stale copies off in the UI.
-- Shipping a veille / crawler coworker with "check every source, open several PDFs, then email" but no max entities, max sources, max tool calls, cursor, or partial-report rule — rule #28. The stop-after-email clause does not bound the pre-email crawl; add budgets or split into shards.
+- Email coworker prompt says "prepare / write / summarize the email" but never says "send it with the email tool and stop only after send confirmation" — rule #28. The agent may output the summary in chat and forget the real send step.
 
 ## See also
 
