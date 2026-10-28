@@ -1,0 +1,101 @@
+--- lead_pipeline_b.orig.py	2026-10-28 10:00:53
++++ dl-pipeline/lead_pipeline_b.py	2026-10-28 10:20:52
+@@ -185,7 +185,7 @@
+ FIRECRAWL_PROBE = os.environ.get("FIRECRAWL_PROBE", "0") == "1"
+ FAST_MODE = not FIRECRAWL_PROBE
+ TARGET_RUN_SECONDS = 150
+-FAST_WEB_SECONDS = 25
++FAST_WEB_SECONDS = 60  # Exa owner searches only start after AI Mode; 25 s covered 13 of 51 leads on 28/10/2026
+ FIRECRAWL_OBSERVED_MINUTE_QUOTA = 10
+ 
+ 
+@@ -197,7 +197,7 @@
+         run_start = WORK / "start"
+         started = float(run_start.read_text()) if run_start.exists() else time.time()
+         budget = {"targetRunSeconds": TARGET_RUN_SECONDS,
+-                  "deadline": min(time.time() + FAST_WEB_SECONDS, started + 90),
++                  "deadline": time.time() + FAST_WEB_SECONDS,
+                   "webSeconds": FAST_WEB_SECONDS}
+         core.save_json(path, budget)
+     return budget["deadline"]
+@@ -496,7 +496,8 @@
+             while pending:
+                 if FAST_MODE and fast_deadline()-time.time() < 13:
+                     break  # Reserve a short burst for Firecrawl and time for extraction/rendering.
+-                if SLICES_RUN and time.time() - WEB_STARTED > WEB_BUDGET:
++                # The slice budget belongs to the resumable `web` command; prepare's fast mode is bounded by fast_deadline().
++                if not FAST_MODE and SLICES_RUN and time.time() - WEB_STARTED > WEB_BUDGET:
+                     raise WebPartial()
+                 width = 1 if tool_server == "exa" and not (WEB / "exa-healthy.json").exists() else (12 if FAST_MODE else SLICE)
+                 part, pending = pending[:width], pending[width:]
+@@ -571,15 +572,15 @@
+ 
+ 
+ def clean_ai_text(text):
+-    """Plain lines for the digest: links and citation markers out, Markdown out, and the lines
+-    that only say "Not publicly available" dropped, so 100 leads fit in a couple of reads."""
++    """Plain lines for the digest: links and citation markers out, Markdown out. Every answer line
++    stays, including "Not publicly available (...)" ones, whose parenthesis is often the only lead."""
+     text = re.sub(r"\[\[\d+\]\]\([^)]*\)|\[\d+\]", "", text or "")
+     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+     lines = []
+     for line in text.splitlines():
+         bullet = re.match(r"\s*[*-]\s+\S", line)
+         line = re.sub(r"\s+", " ", re.sub(r"^\s*#+|\*", "", line)).strip().lstrip("- ").strip()
+-        if not line or re.fullmatch(r"[^:]{0,80}:\s*\(?not publicly (available|listed)[^:]*", line, re.I):
++        if not line:
+             continue
+         lines.append(f"- {line}" if bullet else line)
+     return "\n".join(lines)
+@@ -594,8 +595,11 @@
+     """Reads AI Mode's numbered answer to the twelve questions into the Research schema. Value and
+     evidence are the answer's own line, so the evidence check passes and the agent only corrects."""
+     research, current = {}, None
+-    for line in (answer or "").splitlines():
+-        head = re.match(r"(?:\d+[.)]\s*|-\s*\d*[.)]?\s*)?([^:]{3,80}):\s*(.*)$", line)
++    # "1) Owner or Manager Full Name" then "- Joyce ..." on the next line becomes one "label: value" line.
++    answer = re.sub(r"(?mi)^(\d+[.)]\s*[^:\n]*?(?:owner|manager)[^:\n]{0,60}?):?\s*\n- ", r"\1: ", answer or "")
++    for line in answer.splitlines():
++        # "label: value", or a numbered heading without colon ("3) 3 Interesting Facts") whose bullets follow.
++        head = re.match(r"(?:\d+[.)]\s*|-\s*\d*[.)]?\s*)?([^:]{3,80}):\s*(.*)$", line) or re.match(r"\d+[.)]\s*([^:]{3,80})()$", line)
+         label = next((key for key, pattern in PREFILL_LABELS if head and pattern.search(head.group(1))), None)
+         if label:
+             current, value = label, head.group(2).strip()
+@@ -606,6 +610,7 @@
+                 continue
+             if label == "owner":
+                 value = re.split(r"\s+\(|;|\s+-\s+|,\s+(?:who|the|a|an)\b", value)[0].strip(" .")
++                value = re.sub(r"^(?:owned|run|operated|managed) by\s+", "", value, flags=re.I)
+             if label == "publicEmail":
+                 email = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", value)
+                 if not email:
+@@ -861,6 +866,11 @@
+         exa_items = {f"{l['id']}.platform": ai_mode_items(l["place"], ai_records.get(l["id"])) for l in ai_leads}
+         exa_ok = {f"{l['id']}.platform": bool(ai_records.get(l["id"], {}).get("aiMode")) for l in ai_leads}
+         lead_q = {f"{l['id']}.platform": (f"Google AI Mode: {l['place']['name']}, {l['place']['address']}", "") for l in ai_leads}
++        no_owner = [l for l in ai_leads if not prefill_research(clean_ai_text(((ai_records.get(l["id"]) or {}).get("aiMode") or {}).get("answer"))).get("owner")]
++        core.log(f"Owner missing after AI Mode on {len(no_owner)} leads: operator web search")
++        operator_items, operator_ok = search_all({f"{l['id']}.operator": all_q[f"{l['id']}.operator"] for l in no_owner}, "search") if no_owner else ({}, {})
++        exa_items.update(operator_items)
++        exa_ok.update(operator_ok)
+     else:
+         exa_items, exa_ok = search_all(all_q, "search")
+ 
+@@ -955,7 +965,7 @@
+             refs.append({"ref": f"r{len(refs) + 1}", "url": item["url"], "engine": item["engine"],
+                          "query": item["query"], "title": item["title"][:120],
+                          "text": item["text"] if item.get("engine") == "aimode" else excerpt(item["text"])})
+-            if len(refs) >= (AI_MODE_REFS + 2 if item.get("engine") == "aimode" else 6):
++            if len(refs) >= (AI_MODE_REFS + 5 if lead["id"] in ai_records else 6):
+                 break
+         lead["refs"] = refs
+         lead["searches"] = {k: all_q.get(f"{lead['id']}.{k}", ("Platform-only fallback", ""))[0] for k in ("platform", "operator", "reputation")}
+@@ -972,6 +982,8 @@
+             lead["searches"] = {k: lead_q.get(f"{lead['id']}.platform", ("", ""))[0]
+                 if lead["platformSearched"] else "Deferred or unavailable: fast run time budget / provider failure"
+                 for k in ("platform", "operator", "reputation")}
++            if f"{lead['id']}.operator" in exa_ok:
++                lead["searches"]["operator"] = all_q[f"{lead['id']}.operator"][0]
+         if refs:
+             digests.append({"leadId": lead["id"], "name": place["name"], "address": place["address"],
+                             "refs": [{k: r[k] for k in ("ref", "url", "title", "text")} for r in refs]})
